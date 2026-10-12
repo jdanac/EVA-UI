@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
   <title>NGE Active Time Display Study</title>
 
   <!-- Fonts: if these fail to load, the label and tab fall back to generic faces -->
@@ -10,11 +10,17 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@700&family=Shippori+Mincho+B1:wght@800&display=swap">
 
   <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
 </head>
 <body>
 
-  <!-- The screen: a fixed 1280x720 box with the rainbow gradient as its background -->
-  <main class="screen">
+  <!-- The screen: a fixed 1280x720 box (scaled to fit the window by script.js) with the rainbow gradient as its background.
+       script.js sets data-state here: idle, running or done. -->
+  <main class="screen" data-state="idle">
+
+    <!-- Hazard bands along the top and bottom edges. Hidden until the countdown ends. -->
+    <div class="hazard hazard--top" aria-hidden="true"></div>
+    <div class="hazard hazard--bottom" aria-hidden="true"></div>
 
     <!-- Black panel. The tab and label are positioned against it. -->
     <section class="panel">
@@ -22,43 +28,54 @@
       <div class="tab" lang="ja">現在時刻表示</div>
       <div class="label">ACTIVE TIME DISPLAY:</div>
 
-      <!-- Seven-segment readout, HH:MM:SS:mmm.
-           Every segment is an <i>. Static digits mark lit segments with "on".
-           Live digits have no "on": CSS animations light them (see section 8).
+      <!-- Shown, and blinking, only when the countdown ends -->
+      <div class="alarm">
+        <div class="alarm__jp" lang="ja">警告</div>
+        <div>
+          <div class="alarm__en">WARNING</div>
+          <div class="alarm__sub">EMERGENCY</div>
+        </div>
+      </div>
+
+      <!-- Seven-segment readout: HH:MM:SS then milliseconds, nine digits in all.
+           Every segment is an <i>. A digit is lit by its data-v attribute
+           (0 to 9), which script.js updates; the segment table is in
+           style.css section 6. Without the script every digit stays at 0.
            Segments: a top, b top-right, c bottom-right, d bottom,
-                     e bottom-left, f top-left, g middle.
-           The digits count down from 00:00:59.999 and loop every 60 seconds. -->
-      <div class="readout" role="img" aria-label="Active time display, counting down in milliseconds">
+                     e bottom-left, f top-left, g middle. -->
+      <div class="readout" role="img" aria-label="Active time display">
 
-        <!-- HH: frozen at 00 -->
-        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
-        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
+        <!-- HH -->
+        <span class="digit" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
         <span class="colon"></span>
 
-        <!-- MM: frozen at 00 -->
-        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
-        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
+        <!-- MM -->
+        <span class="digit" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
         <span class="colon"></span>
 
-        <!-- SS: tens counts 5 to 0 (6 states, 10s each), units counts 9 to 0 (1s each) -->
-        <span class="digit digit--live digit--six digit--s-tens"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
-        <span class="digit digit--live digit--s-units"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <!-- SS -->
+        <span class="digit" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
         <span class="colon"></span>
 
-        <!-- Milliseconds: smaller digits, each 10x faster than the one before it -->
-        <span class="digit digit--ms digit--live digit--ms-hundreds"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
-        <span class="digit digit--ms digit--live digit--ms-tens"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
-        <span class="digit digit--ms digit--live digit--ms-ones"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <!-- Milliseconds: smaller digits -->
+        <span class="digit digit--ms" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit digit--ms" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit digit--ms" data-v="0"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
 
       </div>
 
-      <!-- Right column: inactive source, system label, active source -->
+      <!-- Right column: EXTERNAL while idle. Once the countdown starts the display
+           runs on battery, so INTERNAL lights up and shows its hazard block. -->
       <div class="side">
-        <div class="src src--off" aria-hidden="true">
+        <div class="src src--internal">
           <div>
             <div class="src__jp" lang="ja">内部</div>
             <div class="src__en">INTERNAL</div>
           </div>
+          <div class="src__hazard"></div>
         </div>
 
         <div class="supply">
@@ -66,17 +83,48 @@
           <div class="supply__en">MAIN ENERGY SUPPLY SYSTEM</div>
         </div>
 
-        <div class="src src--on">
+        <div class="src src--external">
           <div>
             <div class="src__jp" lang="ja">外部</div>
             <div class="src__en">EXTERNAL</div>
           </div>
-          <div class="src__hazard"></div>
         </div>
       </div>
     </section>
 
+    <!-- Controls. Hidden until script.js runs, since nothing here works without it. -->
+    <div class="controls" hidden>
+
+      <!-- Labels only. RACING is highlighted while the countdown runs. -->
+      <ul class="modes" aria-label="Operating mode">
+        <li class="mode mode--stop">STOP</li>
+        <li class="mode mode--slow">SLOW</li>
+        <li class="mode mode--normal">NORMAL</li>
+        <li class="mode mode--racing">RACING</li>
+      </ul>
+
+      <form class="entry" novalidate>
+        <label class="field">
+          <span class="field__label"><span lang="ja">設定時間</span>SET TIME</span>
+          <input class="field__input" id="time" type="text" inputmode="numeric" autocomplete="off" value="00:00:30" aria-describedby="time-hint">
+        </label>
+        <button class="btn" id="start" type="submit">START</button>
+        <button class="btn" id="reset" type="button">RESET</button>
+      </form>
+    </div>
+
+    <!-- Read aloud, not shown. Announces when the countdown starts and ends. -->
+    <p class="sr-only" id="time-hint">Type digits to fill hours, minutes and seconds from the right. The maximum is 99:59:59.</p>
+    <p class="sr-only" id="status" role="status"></p>
+
   </main>
+
+  <!-- Phone in portrait only: covers the screen and asks for landscape (style.css section 10) -->
+  <div class="rotate">
+    <div class="rotate__icon" aria-hidden="true"></div>
+    <div class="rotate__jp" lang="ja">画面を横向きにしてください</div>
+    <div class="rotate__en">ROTATE TO LANDSCAPE</div>
+  </div>
 
 </body>
 </html>

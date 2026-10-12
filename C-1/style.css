@@ -1,7 +1,9 @@
 /* =========================================================
    NGE ACTIVE TIME DISPLAY STUDY
-   Pure CSS. No JavaScript.
-   Read top to bottom: variables, layout, type, graphics, motion.
+   Look and layout only. Behavior lives in script.js, which sets
+   attributes (data-v, data-state, aria-current) that the rules below
+   react to.
+   Read top to bottom: variables, layout, type, graphics, controls, state.
    ========================================================= */
 
 
@@ -13,7 +15,8 @@
   --lit: #ffc21a;
   --ghost: #2b2208;
   --dim: #5c4811;        /* text and outlines of inactive indicators */
-  --alert: #ff3b1f;      /* hazard stripes */
+  --alert: #ff3b1f;      /* warning red */
+  --alert-deep: #5c0800; /* dark end of the alert gradient */
   --panel: #000000;
 
   --rainbow: linear-gradient(
@@ -25,19 +28,42 @@
     #2fc4a4 100%
   );
 
+  /* Replaces the rainbow when the countdown ends */
+  --alert-gradient: linear-gradient(
+    90deg,
+    var(--alert-deep) 0%,
+    var(--alert) 50%,
+    var(--alert-deep) 100%
+  );
+
   --font-jp: 'Shippori Mincho B1', serif;
   --font-label: 'Archivo Narrow', sans-serif;
 }
 
 body {
   margin: 0;
-  background: #0a0a0a;   /* page behind the screen, slightly lighter so the edge is visible */
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;         /* with margin: auto on .screen, centers it both ways */
+  background-color: #0a0a0a;   /* page behind the screen, slightly lighter so the edge is visible */
+
+  /* Registration marks: a grid of small plus signs, as on the reference maps.
+     One 48px SVG tile with a 1px cross at its center, repeated across the page.
+     Centered, so the grid is symmetric around the screen. The stage is opaque
+     and covers the marks, so they only show in the margin around it. The
+     stroke is #584410, a dim amber close to --dim. An SVG url cannot read a
+     CSS variable, so the hex is written out here as %23584410. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M19 24.5h10M24.5 19v10' stroke='%23584410' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-position: center;
 }
 
 
 /* ---------- 2. THE SCREEN ----------
    Fixed size, position: relative so the panel can be placed with
-   absolute offsets, overflow: hidden so nothing leaks out. */
+   absolute offsets, overflow: hidden so nothing leaks out. The auto margin
+   centers it in the window both ways. In a window smaller than the screen the
+   margin drops to zero, so the page scrolls instead of clipping the left and
+   top edges, which centering with place-items would do. */
 .screen {
   position: relative;
   width: 1280px;
@@ -45,7 +71,8 @@ body {
   box-sizing: border-box;
   background: var(--rainbow);
   overflow: hidden;
-  margin: 0 auto;
+  margin: auto;
+  zoom: var(--scale, 1);   /* set by script.js to fit the window, see section 10 */
 }
 
 
@@ -131,7 +158,21 @@ body {
   display: block;
   background-color: var(--ghost);
 }
-.digit i.on { background-color: var(--lit); }
+
+/* Which segments light for each value. script.js only ever sets data-v on
+   the digit, and this table does the rest. One rule, ten selectors. */
+.digit[data-v="0"] :is(.a, .b, .c, .d, .e, .f),
+.digit[data-v="1"] :is(.b, .c),
+.digit[data-v="2"] :is(.a, .b, .d, .e, .g),
+.digit[data-v="3"] :is(.a, .b, .c, .d, .g),
+.digit[data-v="4"] :is(.b, .c, .f, .g),
+.digit[data-v="5"] :is(.a, .c, .d, .f, .g),
+.digit[data-v="6"] :is(.a, .c, .d, .e, .f, .g),
+.digit[data-v="7"] :is(.a, .b, .c),
+.digit[data-v="8"] :is(.a, .b, .c, .d, .e, .f, .g),
+.digit[data-v="9"] :is(.a, .b, .c, .d, .f, .g) {
+  background-color: var(--lit);
+}
 
 /* Horizontal bars: a (top), g (middle), d (bottom) */
 .digit .a, .digit .g, .digit .d {
@@ -205,8 +246,10 @@ body {
   color: var(--lit);
 }
 
-/* Power source box. The inactive one is the same box in --dim colors,
-   so "on" versus "off" is a color swap, not a different shape. */
+/* Power source box. The inactive one is switched off completely: hidden, so
+   it blends into the black panel, and left out of what screen readers read.
+   The box keeps its space, so nothing shifts when the source swaps.
+   Which one is active is decided in section 9. */
 .src {
   display: flex;
   justify-content: space-between;
@@ -214,10 +257,7 @@ body {
   padding: 6px 10px 8px;
   border: 2px solid var(--lit);
 }
-.src--off {
-  border-color: var(--dim);
-  color: var(--dim);
-}
+.src--internal { visibility: hidden; }
 .src__jp {
   font-family: var(--font-jp);
   font-weight: 800;
@@ -232,10 +272,14 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* Hazard block: hard color stops make sharp stripes, as in W-1 */
+/* Hazard block: hard color stops make sharp stripes, as in W-1. It marks
+   battery power, so it belongs to INTERNAL and only shows while that box is
+   lit (section 9). */
 .src__hazard {
-  width: 38px;
-  height: 38px;
+  display: none;
+  align-self: center;   /* .src aligns its items to the top; this one centers */
+  width: 90px;
+  height: 48px;
   background: repeating-linear-gradient(
     -45deg,
     var(--alert) 0,
@@ -264,145 +308,383 @@ body {
 }
 
 
-/* ---------- 8. MOTION ----------
-   Counting without JavaScript. Every live digit runs one animation per
-   segment, and each animation holds that segment lit or dark for one step
-   at a time. steps(1) makes the change instant instead of a fade.
-
-   A digit counts DOWN, so its first step is its highest value (9, or 5 for
-   the tens of seconds) and its last step is 0. Each digit has one cycle
-   length: ten steps for a normal digit, six for the tens of seconds.
-
-   Every cycle divides evenly into 60 seconds, and all animations start
-   together, so the display is a seamless 00:00:59.999 to 00:00:00.000 loop.
-
-   The 1 ms digit cycles every 10 ms, faster than a screen refreshes, so it
-   only ever shows a blur of changing digits. That is the intended look. */
-
-.digit--live i {
-  animation-duration: var(--cycle);
-  animation-timing-function: steps(1);
-  animation-iteration-count: infinite;
+/* ---------- 8. CONTROLS ----------
+   A row under the panel, on the gradient. Mode labels on the left, the
+   time entry on the right. The row is hidden until script.js runs, because
+   controls that do nothing are worse than no controls. */
+.controls {
+  position: absolute;
+  left: 73px;
+  top: 556px;
+  width: 1134px;
+  box-sizing: border-box;
+  padding: 0 30px 0 50px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
+.controls[hidden] { display: none; }
 
-.digit--s-tens      { --cycle: 60s; }
-.digit--s-units     { --cycle: 10s; }
-.digit--ms-hundreds { --cycle: 1s; }
-.digit--ms-tens     { --cycle: 0.1s; }
-.digit--ms-ones     { --cycle: 0.01s; }
-
-/* Ten-state digits use seg-*, the six-state digit uses seg6-* */
-.digit--live .a { animation-name: seg-a; }
-.digit--live .b { animation-name: seg-b; }
-.digit--live .c { animation-name: seg-c; }
-.digit--live .d { animation-name: seg-d; }
-.digit--live .e { animation-name: seg-e; }
-.digit--live .f { animation-name: seg-f; }
-.digit--live .g { animation-name: seg-g; }
-
-.digit--six .a { animation-name: seg6-a; }
-.digit--six .b { animation-name: seg6-b; }
-.digit--six .c { animation-name: seg6-c; }
-.digit--six .d { animation-name: seg6-d; }
-.digit--six .e { animation-name: seg6-e; }
-.digit--six .f { animation-name: seg6-f; }
-.digit--six .g { animation-name: seg6-g; }
-
-/* Generated lookup: which segments are lit at each step of a digit.
-   Ten steps, 9 down to 0, then six steps, 5 down to 0. Each keyframe is
-   written only where a segment changes state. */
-@keyframes seg-a {
-  0% { background-color: var(--lit); }
-  50% { background-color: var(--ghost); }
-  60% { background-color: var(--lit); }
-  80% { background-color: var(--ghost); }
-  90% { background-color: var(--lit); }
+/* Mode labels. They are indicators, not buttons: nothing here is clickable.
+   script.js sets aria-current on the active one, and the red bar follows
+   that attribute. */
+.modes {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-@keyframes seg-b {
-  0% { background-color: var(--lit); }
-  30% { background-color: var(--ghost); }
-  50% { background-color: var(--lit); }
+.mode {
+  position: relative;
+  box-sizing: border-box;
+  width: 108px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 6px;
+  background: var(--panel);
+  border: 2px solid var(--lit);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  color: var(--lit);
 }
-@keyframes seg-c {
-  0% { background-color: var(--lit); }
-  70% { background-color: var(--ghost); }
-  80% { background-color: var(--lit); }
-}
-@keyframes seg-d {
-  0% { background-color: var(--lit); }
-  20% { background-color: var(--ghost); }
-  30% { background-color: var(--lit); }
-  50% { background-color: var(--ghost); }
-  60% { background-color: var(--lit); }
-  80% { background-color: var(--ghost); }
-  90% { background-color: var(--lit); }
-}
-@keyframes seg-e {
-  0% { background-color: var(--ghost); }
-  10% { background-color: var(--lit); }
-  20% { background-color: var(--ghost); }
-  30% { background-color: var(--lit); }
-  40% { background-color: var(--ghost); }
-  70% { background-color: var(--lit); }
-  80% { background-color: var(--ghost); }
-  90% { background-color: var(--lit); }
-}
-@keyframes seg-f {
-  0% { background-color: var(--lit); }
-  20% { background-color: var(--ghost); }
-  30% { background-color: var(--lit); }
-  60% { background-color: var(--ghost); }
-  90% { background-color: var(--lit); }
-}
-@keyframes seg-g {
-  0% { background-color: var(--lit); }
-  20% { background-color: var(--ghost); }
-  30% { background-color: var(--lit); }
-  80% { background-color: var(--ghost); }
+.mode[aria-current="true"]::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  height: 7px;
+  background: var(--alert);
 }
 
-@keyframes seg6-a {
-  0% { background-color: var(--lit); }
-  16.6667% { background-color: var(--ghost); }
-  33.3333% { background-color: var(--lit); }
-  66.6667% { background-color: var(--ghost); }
-  83.3333% { background-color: var(--lit); }
-}
-@keyframes seg6-b {
-  0% { background-color: var(--ghost); }
-  16.6667% { background-color: var(--lit); }
-}
-@keyframes seg6-c {
-  0% { background-color: var(--lit); }
-  50% { background-color: var(--ghost); }
-  66.6667% { background-color: var(--lit); }
-}
-@keyframes seg6-d {
-  0% { background-color: var(--lit); }
-  16.6667% { background-color: var(--ghost); }
-  33.3333% { background-color: var(--lit); }
-  66.6667% { background-color: var(--ghost); }
-  83.3333% { background-color: var(--lit); }
-}
-@keyframes seg6-e {
-  0% { background-color: var(--ghost); }
-  50% { background-color: var(--lit); }
-  66.6667% { background-color: var(--ghost); }
-  83.3333% { background-color: var(--lit); }
-}
-@keyframes seg6-f {
-  0% { background-color: var(--lit); }
-  33.3333% { background-color: var(--ghost); }
-  83.3333% { background-color: var(--lit); }
-}
-@keyframes seg6-g {
-  0% { background-color: var(--lit); }
-  66.6667% { background-color: var(--ghost); }
+/* Time entry: a field, then two buttons. All three are 56px tall so
+   they line up with the mode labels and clear the 44px tap target. */
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
-/* Good habit: respect users who turn off motion in their system settings.
-   Pausing, rather than removing, the animations freezes the display on its
-   first frame (00:00:59.999) instead of leaving every segment dark. */
+.field {
+  box-sizing: border-box;
+  width: 240px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--panel);
+  border: 2px solid var(--lit);
+  color: var(--lit);
+  cursor: text;
+}
+.field__label {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+}
+.field__label [lang] {
+  display: block;
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+.field__input {
+  width: 124px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: 0.04em;
+  text-align: right;
+  color: inherit;
+  /* The field box draws the focus state, so the bare input needs no ring */
+  outline: none;
+}
+
+.btn {
+  box-sizing: border-box;
+  width: 110px;
+  height: 56px;
+  padding: 0 0 4px;
+  background: var(--panel);
+  border: 2px solid var(--lit);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  color: var(--lit);
+  cursor: pointer;
+}
+
+/* Focus and hover are a color swap, in the same spirit as the inverted tag
+   in W-1. Strong enough to see on the gradient, and no extra elements. */
+.field:focus-within,
+.btn:hover,
+.btn:focus-visible {
+  background: var(--lit);
+  color: var(--panel);
+  outline: 3px solid var(--panel);
+  outline-offset: 2px;
+}
+
+/* Inactive controls drop to the dim palette. They stay visible, unlike the
+   power source boxes, because they are still there to be used later. */
+.btn:disabled,
+.field__input:disabled {
+  border-color: var(--dim);
+  color: var(--dim);
+  cursor: not-allowed;
+}
+.btn:disabled:hover {
+  background: var(--panel);
+  outline: none;
+}
+
+/* Visually hidden, still read aloud. Used for the status announcement. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+
+/* ---------- 9. STATE AND ALERT ----------
+   script.js sets data-state on .screen to idle, running or done.
+   idle:    the entered time is shown, frozen. Power source: EXTERNAL.
+   running: counting down. RACING is highlighted (section 8), and the
+            power source swaps from EXTERNAL to INTERNAL.
+   done:    zero reached. The screen goes to alert (below). The power
+            source stays on INTERNAL until reset.
+
+   The alert pieces are in the page from the start and stay hidden until
+   done, so nothing is added or removed by script. */
+
+/* Alert backdrop: a second gradient laid over the rainbow, invisible until
+   done. It is the first child of .screen, so the panel and controls paint
+   above it. */
+.screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--alert-gradient);
+  opacity: 0;
+}
+
+/* Hazard band: red and black diagonal stripes, as in W-1. The strip inside
+   is wider than the screen and slides sideways by exactly one stripe period,
+   so the loop has no visible seam. The period along x is the 32px stripe
+   pair divided by cos(45deg), which is 45.2548px. */
+.hazard {
+  display: none;
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 22px;
+  overflow: hidden;
+}
+.hazard--top    { top: 0; }
+.hazard--bottom { bottom: 0; }
+.hazard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -46px;
+  width: calc(100% + 92px);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--alert) 0,
+    var(--alert) 16px,
+    var(--panel) 16px,
+    var(--panel) 32px
+  );
+}
+
+/* Warning label: a red plate with black text, in the free space beside the
+   ACTIVE TIME DISPLAY label. Black on this red is about 6.6:1. */
+.alarm {
+  display: none;
+  position: absolute;
+  left: 340px;
+  top: 14px;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 16px 5px 14px;
+  background: var(--alert);
+  color: var(--panel);
+}
+.alarm__jp {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+}
+.alarm__en {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: 0.3em;
+}
+.alarm__sub {
+  margin-top: 3px;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.3em;
+}
+
+/* Power source swap: EXTERNAL is on while idle, with no hazard block, and
+   INTERNAL is off. Once the countdown starts the display runs on battery:
+   INTERNAL switches on and shows its hazard block, and EXTERNAL switches off.
+   It stays that way through done, until reset. */
+.screen:is([data-state="running"], [data-state="done"]) .src--internal {
+  visibility: visible;
+}
+.screen:is([data-state="running"], [data-state="done"]) .src--external {
+  visibility: hidden;
+}
+.screen:is([data-state="running"], [data-state="done"]) .src--internal .src__hazard {
+  display: block;
+}
+
+/* The alert. All five animations share one hard 1s beat, started on the
+   same frame, so they stay in step. */
+@keyframes blink {
+  0%, 49%    { opacity: 1; }
+  50%, 100%  { opacity: var(--low); }
+}
+/* The backdrop darkens instead of fading out, because fading would let the
+   rainbow show through underneath */
+@keyframes dim {
+  0%, 49%    { filter: brightness(1); }
+  50%, 100%  { filter: brightness(0.55); }
+}
+@keyframes hazard-scroll {
+  to { transform: translateX(45.2548px); }
+}
+
+/* Backdrop: the rainbow is replaced by red, which pulses dark and bright */
+.screen[data-state="done"]::before {
+  opacity: 1;
+  animation: dim 1s steps(1) infinite;
+}
+
+/* Bands appear and scroll */
+.screen[data-state="done"] .hazard { display: block; }
+.screen[data-state="done"] .hazard::before {
+  animation: hazard-scroll 0.8s linear infinite;
+}
+
+/* The hazard block on INTERNAL blinks fully on and off, so the battery-power
+   marker flashes when the time runs out. It is only displayed once the
+   countdown has started (above), so this is the done state's addition. */
+.screen[data-state="done"] .src--internal .src__hazard {
+  --low: 0;
+  animation: blink 1s steps(1) infinite;
+}
+
+/* Warning label blinks fully on and off, like WARNING in W-1 */
+.screen[data-state="done"] .alarm {
+  --low: 0;
+  display: flex;
+  animation: blink 1s steps(1) infinite;
+}
+
+/* Digits turn red and dip, but stay readable. Overriding the two color
+   variables on .readout recolors every segment and colon at once. */
+.screen[data-state="done"] .readout {
+  --lit: var(--alert);
+  --ghost: #3a0e08;
+  --low: 0.3;
+  animation: blink 1s steps(1) infinite;
+}
+
+/* Reduced motion: keep the alert, drop the movement. The red backdrop, bands,
+   label, hazard block and red digits all stay, steady, so the message still
+   gets through. */
 @media (prefers-reduced-motion: reduce) {
-  .digit--live i { animation-play-state: paused; }
+  .screen[data-state="done"]::before,
+  .screen[data-state="done"] .hazard::before,
+  .screen[data-state="done"] .src--internal .src__hazard,
+  .screen[data-state="done"] .alarm,
+  .screen[data-state="done"] .readout {
+    animation: none;
+  }
+}
+
+
+/* ---------- 10. FIT TO THE WINDOW ----------
+   script.js sets --scale on the root to the largest value that fits the
+   1280x720 stage in the window, and .screen applies it with zoom. Zoom,
+   unlike transform, changes the layout size too, so the centering in section 2
+   keeps working and nothing is left over to scroll. Without the script the
+   stage stays at full size, centered, and scrolls.
+
+   Phones in portrait would shrink the stage to about a quarter of its size, too
+   small to read or tap, so below 600px wide a rotate prompt covers it instead.
+   The page cannot lock the orientation itself (that needs fullscreen and is
+   unsupported on iOS), so it asks. */
+.rotate {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  .screen {
+    visibility: hidden;
+  }
+  .rotate {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    background: var(--panel);
+    color: var(--lit);
+    text-align: center;
+  }
+  .rotate__icon {
+    width: 56px;
+    height: 88px;
+    box-sizing: border-box;
+    border: 3px solid var(--lit);
+    border-radius: 8px;
+    transform: rotate(90deg);
+    margin-bottom: 28px;
+  }
+  .rotate__jp {
+    font-family: var(--font-jp);
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  .rotate__en {
+    font-family: var(--font-label);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    padding-left: 0.2em;   /* offsets the trailing letter space so it stays centered */
+  }
 }
