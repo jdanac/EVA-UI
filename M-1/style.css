@@ -1,0 +1,475 @@
+/* =========================================================
+   NGE MAGI DELIBERATION STUDY
+   Look and layout only: the three plates, the MAGI hexagon and the text
+   blocks around them, matched to references/m2.jpg. script.js sets
+   data-state on .screen, data-status and data-vote on each plate, and
+   data-verdict on the verdict box; the rules below react to them.
+   Read top to bottom: variables, screen, text blocks, plates, stamps,
+   states, controls, small screens.
+   ========================================================= */
+
+
+/* ---------- 1. VARIABLES ----------
+   Two color families, as in the reference: teal for the machine (outlines,
+   names, approvals) and orange-red for the system text around it. Red is also
+   the deny color. The glow colors are the same hues at partial opacity. */
+:root {
+  --teal: #7ff0d8;
+  --teal-pale: #b9fbee;
+  --teal-glow: rgba(127, 240, 216, 0.55);
+
+  --orange: #ff7a3a;       /* body text */
+  --orange-pale: #ff9f78;  /* labels inside the header boxes */
+  --teal-dim: #2f5d54;     /* disabled controls */
+  --red: #ff3b1f;          /* header box outlines, deny stamp */
+  --red-glow: rgba(255, 59, 31, 0.6);
+
+  --font-jp: 'Shippori Mincho B1', serif;
+  --font-label: 'Archivo Narrow', sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;         /* with margin: auto on .screen, centers it both ways */
+  background-color: #0a0a0a;
+
+  /* Registration marks, as in C-1: a 48px SVG tile with a 1px cross, centered.
+     The stroke is a dim teal here (#1d4a42). It is written out as %231d4a42
+     because an SVG url cannot read a CSS variable. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M19 24.5h10M24.5 19v10' stroke='%231d4a42' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-position: center;
+}
+
+
+/* ---------- 2. THE SCREEN ----------
+   Fixed size on pure black, position: relative so everything inside can be
+   placed with absolute offsets. The auto margin centers it; script.js sets
+   --scale and zoom fits it to the window (section 8). */
+.screen {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  box-sizing: border-box;
+  background: #000;
+  overflow: hidden;
+  margin: auto;
+  zoom: var(--scale, 1);
+  font-family: var(--font-label);
+  font-weight: 700;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+
+/* ---------- 3. TEXT BLOCKS ----------
+   The left column: two glowing header boxes, then the system code. */
+.info {
+  position: absolute;
+  left: 40px;
+  top: 40px;
+  width: 440px;
+}
+
+.tag {
+  position: relative;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 12px 18px 14px;
+  border: 3px solid var(--red);
+  border-radius: 14px;
+  color: var(--orange-pale);
+  font-size: 20px;
+  line-height: 1.55;
+  text-transform: uppercase;
+  /* A glow outside and a softer one inside, so the line itself looks lit */
+  box-shadow: 0 0 8px var(--red-glow), inset 0 0 8px var(--red-glow);
+  text-shadow: 0 0 6px var(--red-glow);
+}
+.tag p { margin: 0; }
+.tag--link   { width: 346px; white-space: nowrap; }
+.tag--result { width: 432px; padding: 10px 40px 12px; white-space: nowrap; }
+
+.tag__label { color: var(--orange-pale); }
+.tag__big {
+  color: #ffb08c;
+  font-size: 30px;
+}
+.tag__big--lg { font-size: 29px; line-height: 1.3; overflow: hidden; }
+.tag--verdict { width: 346px; padding-top: 8px; padding-bottom: 10px; }
+
+/* The two capsules at the ends of the result box */
+.tag--result::before,
+.tag--result::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  width: 12px;
+  box-sizing: border-box;
+  border: 3px solid var(--red);
+  border-radius: 9px;
+  box-shadow: 0 0 6px var(--red-glow);
+}
+.tag--result::before { left: 10px; }
+.tag--result::after  { right: 10px; }
+
+/* System code: label and value side by side in a two-column grid, which keeps
+   it short enough to clear the controls row. The reference stacks them. */
+.code {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.7em;
+  margin: 24px 0 0 6px;
+  color: var(--orange);
+  font-size: 21px;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(255, 122, 58, 0.45);
+}
+.code dt,
+.code dd { margin: 0; }
+
+/* Connection layers on the right */
+.layers {
+  position: absolute;
+  left: 920px;
+  top: 112px;
+  width: 300px;
+  margin: 0;
+  color: var(--orange);
+  font-size: 19px;
+  line-height: 1.3;
+  text-shadow: 0 0 6px rgba(255, 122, 58, 0.45);
+}
+.layers dt,
+.layers dd { margin: 0; }
+
+
+/* ---------- 4. THE PLATES ----------
+   .magi is a 598 x 560 box holding the three computers and the hexagon.
+   Every piece is placed by its top-left corner inside it, at the same
+   coordinates as the reference, so the shared edges line up.
+
+   Each shape is an inline SVG polygon. SVG parts take stroke and fill
+   rather than border and background, which is also what lets the corners be
+   cut at an angle. overflow: visible stops the stroke, which is centered on
+   the outline, from being clipped by the SVG box. */
+.magi {
+  position: absolute;
+  left: 420px;
+  top: 70px;
+  width: 598px;
+  height: 560px;
+}
+
+.node,
+.core {
+  position: absolute;
+}
+.node--balthasar { left: 139px; top: 0;     width: 323px; height: 250px; }
+.node--casper    { left: 0;     top: 305px; width: 282px; height: 254px; }
+.node--melchior  { left: 316px; top: 305px; width: 282px; height: 254px; }
+.core            { left: 190px; top: 250px; width: 218px; height: 127px; }
+
+.node__shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 4px var(--teal-glow)) drop-shadow(0 0 12px var(--teal-glow));
+}
+.node__shape polygon {
+  fill: #000;
+  stroke: var(--teal);
+  stroke-width: 7;
+  stroke-linejoin: miter;
+}
+
+/* Computer names, in pale teal so the glow reads against the outline */
+.node__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 0;
+  color: var(--teal-pale);
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-shadow: 0 0 8px var(--teal-glow);
+}
+.node--balthasar .node__name { top: 34px; }
+.node--casper .node__name,
+.node--melchior .node__name  { bottom: 30px; }
+
+/* The hexagon label is a serif, as in the reference */
+.core__name {
+  position: absolute;
+  inset: 0 0 11px 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: var(--teal-pale);
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 42px;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px var(--teal-glow);
+}
+
+/* The short bar joining the two lower plates */
+.link {
+  position: absolute;
+  left: 282px;
+  top: 396px;
+  width: 34px;
+  height: 7px;
+  background: var(--teal);
+  box-shadow: 0 0 6px var(--teal-glow), 0 0 12px var(--teal-glow);
+}
+
+
+/* ---------- 5. VOTE STAMPS ----------
+   A boxed word on each plate. data-vote on the plate picks the color:
+   approve is teal, deny is red. */
+.stamp {
+  position: absolute;
+  box-sizing: border-box;
+  width: 166px;
+  height: 80px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--teal);
+  border-radius: 9px;
+  color: var(--teal-pale);
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 58px;
+  line-height: 1;
+  text-shadow: 0 0 8px var(--teal-glow);
+  box-shadow: 0 0 6px var(--teal-glow), inset 0 0 6px var(--teal-glow);
+}
+.node--balthasar .stamp { left: 78px; top: 117px; }
+.node--casper .stamp    { left: 54px; top: 60px; }
+.node--melchior .stamp  { left: 63px; top: 60px; }
+
+.node[data-vote="deny"] .stamp {
+  border-color: var(--red);
+  color: #ff5a3a;
+  text-shadow: 0 0 8px var(--red-glow);
+  box-shadow: 0 0 6px var(--red-glow), inset 0 0 6px var(--red-glow);
+}
+
+
+/* ---------- 6. STATES ----------
+   data-status on each plate: standby, processing or voted.
+   Voted plates show their stamp (section 5). Plates that are not voted hide it.
+   visibility, not display, so the plate keeps its layout and a hidden stamp
+   is also left out of what a screen reader reads. */
+.node:not([data-status="voted"]) .stamp {
+  visibility: hidden;
+}
+
+/* While a computer is processing, its plate flickers between black and a pale
+   teal fill, a hard on/off beat like the blink in C-1. Each one runs at its
+   own speed so they drift out of step. */
+@keyframes scan {
+  0%, 49%   { fill: #000; }
+  50%, 100% { fill: rgba(127, 240, 216, 0.2); }
+}
+.node[data-status="processing"] .node__shape polygon {
+  animation: scan 0.7s steps(1) infinite;
+}
+.node--casper[data-status="processing"] .node__shape polygon   { animation-duration: 0.55s; }
+.node--melchior[data-status="processing"] .node__shape polygon { animation-duration: 0.85s; }
+
+/* data-verdict on the verdict box: teal for approved, red for denied, and the
+   header-box orange while pending or deliberating */
+.tag--verdict[data-verdict="approve"] {
+  border-color: var(--teal);
+  color: var(--teal-pale);
+  box-shadow: 0 0 8px var(--teal-glow), inset 0 0 8px var(--teal-glow);
+  text-shadow: 0 0 6px var(--teal-glow);
+}
+.tag--verdict[data-verdict="approve"] .tag__label,
+.tag--verdict[data-verdict="approve"] .tag__big { color: var(--teal-pale); }
+.tag--verdict[data-verdict="deny"] .tag__big { color: #ff5a3a; }
+
+/* Reduced motion: no flicker. A processing plate holds the pale fill instead. */
+@media (prefers-reduced-motion: reduce) {
+  .node[data-status="processing"] .node__shape polygon {
+    animation: none;
+    fill: rgba(127, 240, 216, 0.12);
+  }
+}
+
+
+/* ---------- 7. CONTROLS ----------
+   One row along the bottom: the motion text, a vote menu for each computer,
+   then SUBMIT and RESET. Every control is 56px tall, so the tap target is
+   comfortably over 44px. */
+.controls {
+  position: absolute;
+  left: 40px;
+  right: 40px;
+  bottom: 18px;
+  display: flex;
+  gap: 14px;
+}
+.controls[hidden] { display: none; }
+
+.field {
+  box-sizing: border-box;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 14px;
+  border: 2px solid var(--teal);
+  border-radius: 6px;
+  background: #000;
+  color: var(--teal-pale);
+}
+.field--motion { flex: 1 1 auto; min-width: 0; }
+.field:focus-within {
+  box-shadow: 0 0 10px var(--teal-glow), inset 0 0 8px var(--teal-glow);
+}
+
+.field__label {
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  color: var(--teal);
+  line-height: 1.2;
+}
+.field__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--teal-pale);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.field__input:focus { outline: none; }   /* the field box shows focus instead */
+
+/* The menus keep a custom caret, since appearance: none drops the native one */
+select.field__input {
+  appearance: none;
+  width: 150px;
+  padding-right: 22px;
+  cursor: pointer;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237ff0d8' stroke-width='2' fill='none'/%3E%3C/svg%3E") no-repeat right 2px center;
+}
+select.field__input option {
+  background: #000;
+  color: var(--teal-pale);
+}
+
+.btn {
+  box-sizing: border-box;
+  height: 56px;
+  padding: 0 26px;
+  border: 2px solid var(--teal);
+  border-radius: 6px;
+  background: #000;
+  color: var(--teal-pale);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 21px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  background: var(--teal);
+  color: #000;
+}
+/* Keyboard focus swaps colors, so it differs from hover only by the outline */
+.btn:focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 3px;
+}
+
+/* Inactive controls drop to a dim teal. They stay visible, since they come back. */
+.btn:disabled,
+.field:has(:disabled) {
+  border-color: var(--teal-dim);
+  color: var(--teal-dim);
+  cursor: default;
+}
+.field:has(:disabled) .field__label,
+.field:has(:disabled) .field__input { color: var(--teal-dim); }
+
+
+/* ---------- 8. SMALL SCREENS ----------
+   script.js sets --scale on the root to the largest value that fits the
+   1280x720 stage in the window, and .screen applies it with zoom (section 2).
+   Zoom, unlike transform, changes the layout size too, so the centering keeps
+   working. Phones in portrait would shrink the stage too far to read, so
+   below 600px wide a rotate prompt covers it instead. The page cannot lock
+   the orientation itself, so it asks. */
+.rotate {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  .screen {
+    visibility: hidden;
+  }
+  .rotate {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    background: #000;
+    color: var(--teal);
+    text-align: center;
+  }
+  .rotate__icon {
+    width: 56px;
+    height: 88px;
+    box-sizing: border-box;
+    border: 3px solid var(--teal);
+    border-radius: 8px;
+    transform: rotate(90deg);
+    margin-bottom: 28px;
+  }
+  .rotate__jp {
+    font-family: var(--font-jp);
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  .rotate__en {
+    font-family: var(--font-label);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    padding-left: 0.2em;   /* offsets the trailing letter space so it stays centered */
+  }
+}

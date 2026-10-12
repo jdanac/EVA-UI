@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+  <title>NGE MAGI Deliberation Study</title>
+
+  <!-- Fonts: if these fail to load, the text falls back to generic faces -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@700&family=Shippori+Mincho+B1:wght@800&display=swap">
+
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+
+  <!-- The screen: a fixed 1280x720 box on black (scaled to fit the window by script.js).
+       script.js sets data-state here (idle, processing or resolved), and data-status
+       and data-vote on each plate. The markup holds a sample result copied from the
+       reference, which is what shows if the script fails. -->
+  <main class="screen" data-state="resolved">
+
+    <!-- Left column: link status, deliberation result, system code -->
+    <section class="info" aria-label="Link and result">
+
+      <div class="tag tag--link">
+        <p><span class="tag__label">DIRECT LINK CONNECTION:</span> MAGI 01</p>
+        <p><span class="tag__label">ACCESS MODE:</span> <span class="tag__big">SUPERUSER</span></p>
+      </div>
+
+      <div class="tag tag--result">
+        <p class="tag__label">RESULT OF THE DELIBERATION</p>
+        <p class="tag__big tag__big--lg">MOTION:<span id="motion-text">SELFDESTRUCTION</span></p>
+      </div>
+
+      <!-- Tally and outcome. script.js sets data-verdict (pending, deliberating,
+           approve or deny) and the text. -->
+      <div class="tag tag--verdict" data-verdict="approve">
+        <p class="tag__label">VERDICT</p>
+        <p class="tag__big" id="verdict-text">APPROVED 2-1</p>
+      </div>
+
+      <dl class="code">
+        <dt>CODE :</dt>       <dd>258</dd>
+        <dt>FILE :</dt>       <dd>MAGI.SYS</dd>
+        <dt>EXTENTION :</dt>  <dd>4096</dd>
+        <dt>EX_MODE :</dt>    <dd>OFF</dd>
+        <dt>PRIORITY :</dt>   <dd>AAA</dd>
+      </dl>
+    </section>
+
+    <!-- The three computers. Each plate is an SVG outline with the name and the
+         vote stamp laid over it as ordinary text. Their edges share lines with
+         the MAGI hexagon in the middle, so the group reads as one shape. -->
+    <div class="magi">
+
+      <section class="node node--balthasar" data-node="balthasar" data-status="voted" data-vote="approve">
+        <svg class="node__shape" viewBox="0 0 323 250" aria-hidden="true"><polygon points="0,0 323,0 323,177 233,250 91,250 0,177"/></svg>
+        <h2 class="node__name">BALTHASAR·2</h2>
+        <p class="stamp"><span class="stamp__jp" lang="ja" aria-hidden="true">承認</span><span class="stamp__en sr-only">Approved</span></p>
+      </section>
+
+      <section class="node node--casper" data-node="casper" data-status="voted" data-vote="deny">
+        <svg class="node__shape" viewBox="0 0 282 254" aria-hidden="true"><polygon points="0,0 190,0 282,72 282,254 0,254"/></svg>
+        <h2 class="node__name">CASPER·3</h2>
+        <p class="stamp"><span class="stamp__jp" lang="ja" aria-hidden="true">否定</span><span class="stamp__en sr-only">Denied</span></p>
+      </section>
+
+      <section class="node node--melchior" data-node="melchior" data-status="voted" data-vote="approve">
+        <svg class="node__shape" viewBox="0 0 282 254" aria-hidden="true"><polygon points="0,72 92,0 282,0 282,254 0,254"/></svg>
+        <h2 class="node__name">MELCHIOR·1</h2>
+        <p class="stamp"><span class="stamp__jp" lang="ja" aria-hidden="true">承認</span><span class="stamp__en sr-only">Approved</span></p>
+      </section>
+
+      <!-- The hexagon in the middle, and the short bar joining the lower plates -->
+      <div class="core">
+        <svg class="node__shape" viewBox="0 0 218 127" aria-hidden="true"><polygon points="40,0 178,0 218,55 126,127 92,127 0,55"/></svg>
+        <p class="core__name">MAGI</p>
+      </div>
+      <div class="link" aria-hidden="true"></div>
+    </div>
+
+    <!-- Right column: connection layers -->
+    <dl class="layers" aria-label="Connection layers">
+      <dt>Layer 3:</dt> <dd>ConnectionControl</dd> <dd>Q:331</dd>
+      <dt>Layer 2:</dt> <dd>DebLink:</dd>          <dd>Q:321·LAPD</dd>
+      <dt>Layer 1:</dt> <dd>Physical Connection</dd> <dd>L431·Basic Interface</dd>
+    </dl>
+
+    <!-- Controls. Hidden until script.js runs, since nothing here works without it.
+         Each computer votes at random unless its menu is set to approve or deny. -->
+    <form class="controls" novalidate hidden>
+      <label class="field field--motion">
+        <span class="field__label">MOTION</span>
+        <input class="field__input" id="motion" type="text" maxlength="22" autocomplete="off" spellcheck="false" value="SELFDESTRUCTION">
+      </label>
+
+      <label class="field">
+        <span class="field__label">MELCHIOR·1</span>
+        <select class="field__input" id="pick-melchior">
+          <option value="auto">RANDOM</option><option value="approve">APPROVE</option><option value="deny">DENY</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field__label">BALTHASAR·2</span>
+        <select class="field__input" id="pick-balthasar">
+          <option value="auto">RANDOM</option><option value="approve">APPROVE</option><option value="deny">DENY</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field__label">CASPER·3</span>
+        <select class="field__input" id="pick-casper">
+          <option value="auto">RANDOM</option><option value="approve">APPROVE</option><option value="deny">DENY</option>
+        </select>
+      </label>
+
+      <button class="btn" id="submit" type="submit">SUBMIT</button>
+      <button class="btn" id="reset" type="button">RESET</button>
+    </form>
+
+    <!-- Read aloud, not shown. Announces each vote and the result. -->
+    <p class="sr-only" id="status" role="status"></p>
+
+  </main>
+
+  <!-- Phone in portrait only: covers the screen and asks for landscape (style.css section 8) -->
+  <div class="rotate">
+    <div class="rotate__icon" aria-hidden="true"></div>
+    <div class="rotate__jp" lang="ja">画面を横向きにしてください</div>
+    <div class="rotate__en">ROTATE TO LANDSCAPE</div>
+  </div>
+
+</body>
+</html>

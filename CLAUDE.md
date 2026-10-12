@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-EVA-UI is a personal UI study: recreations of Neon Genesis Evangelion style screens in HTML and CSS, with vanilla JavaScript added where a screen needs to be interactive. Each study lives in its own folder holding an `index.html` and a `style.css`, plus a `script.js` once it has behavior. Folder names are a letter for the type of screen plus a number: `W-1` is the first Warning screen and `C-1` is the first Countdown screen. Pick a new letter to fit the screen type rather than assuming `W`. There is no build step, package manager, linter or test suite. Do not add any without asking. `W-1` was built CSS only; `C-1` is the first study with a `script.js`.
+EVA-UI is a personal UI study: recreations of Neon Genesis Evangelion style screens in HTML and CSS, with vanilla JavaScript added where a screen needs to be interactive. Each study lives in its own folder holding an `index.html` and a `style.css`, plus a `script.js` once it has behavior. Folder names are a letter for the type of screen plus a number: `W-1` is the first Warning screen and `C-1` is the first Countdown screen. Pick a new letter to fit the screen type rather than assuming `W`. `M-1` is the MAGI study: `data-state` on the stage and `data-status`/`data-vote` on each plate drive it, with the deliberation timers in `script.js`. It is planned as the first with WebGL (a canvas behind the DOM, with all text and state staying in HTML). Its `references/` folder holds reference images and is gitignored. There is no build step, package manager, linter or test suite. Do not add any without asking. `W-1` was built CSS only; `C-1` is the first study with a `script.js`.
 
 ## Running a study
 
