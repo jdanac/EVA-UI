@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NGE Active Time Display Study</title>
+
+  <!-- Fonts: if these fail to load, the label and tab fall back to generic faces -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@700&family=Shippori+Mincho+B1:wght@800&display=swap">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- The screen: a fixed 1280x720 box with the rainbow gradient as its background -->
+  <main class="screen">
+
+    <!-- Black panel. The tab and label are positioned against it. -->
+    <section class="panel">
+
+      <div class="tab" lang="ja">現在時刻表示</div>
+      <div class="label">ACTIVE TIME DISPLAY:</div>
+
+      <!-- Seven-segment readout, HH:MM:SS:mmm.
+           Every segment is an <i>. Static digits mark lit segments with "on".
+           Live digits have no "on": CSS animations light them (see section 8).
+           Segments: a top, b top-right, c bottom-right, d bottom,
+                     e bottom-left, f top-left, g middle.
+           The digits count down from 00:00:59.999 and loop every 60 seconds. -->
+      <div class="readout" role="img" aria-label="Active time display, counting down in milliseconds">
+
+        <!-- HH: frozen at 00 -->
+        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
+        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
+        <span class="colon"></span>
+
+        <!-- MM: frozen at 00 -->
+        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
+        <span class="digit"><i class="a on"></i><i class="b on"></i><i class="c on"></i><i class="d on"></i><i class="e on"></i><i class="f on"></i><i class="g"></i></span>
+        <span class="colon"></span>
+
+        <!-- SS: tens counts 5 to 0 (6 states, 10s each), units counts 9 to 0 (1s each) -->
+        <span class="digit digit--live digit--six digit--s-tens"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit digit--live digit--s-units"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="colon"></span>
+
+        <!-- Milliseconds: smaller digits, each 10x faster than the one before it -->
+        <span class="digit digit--ms digit--live digit--ms-hundreds"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit digit--ms digit--live digit--ms-tens"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+        <span class="digit digit--ms digit--live digit--ms-ones"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i><i class="e"></i><i class="f"></i><i class="g"></i></span>
+
+      </div>
+
+      <!-- Right column: inactive source, system label, active source -->
+      <div class="side">
+        <div class="src src--off" aria-hidden="true">
+          <div>
+            <div class="src__jp" lang="ja">内部</div>
+            <div class="src__en">INTERNAL</div>
+          </div>
+        </div>
+
+        <div class="supply">
+          <div class="supply__jp" lang="ja">主電源供給システム</div>
+          <div class="supply__en">MAIN ENERGY SUPPLY SYSTEM</div>
+        </div>
+
+        <div class="src src--on">
+          <div>
+            <div class="src__jp" lang="ja">外部</div>
+            <div class="src__en">EXTERNAL</div>
+          </div>
+          <div class="src__hazard"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+</body>
+</html>
