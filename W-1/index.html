@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NGE Warning Screen Study</title>
+
+  <!-- Fonts: if these fail to load, the fallbacks will break the compressed look -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=Share+Tech+Mono&family=Shippori+Mincho+B1:wght@800&display=swap">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- The screen: a fixed 1280x720 box. Everything inside is positioned relative to it. -->
+  <main class="screen flicker">
+
+    <!-- Hazard stripes along the top and bottom edges -->
+    <div class="hazard hazard--top"></div>
+    <div class="hazard hazard--bottom"></div>
+
+    <!-- Outer frame. A flex column pushes its three rows to top, middle, bottom. -->
+    <div class="frame">
+
+      <!-- ROW 1: code label (left) and sector (right) -->
+      <header class="row-top">
+        <div class="code-group">
+          <!-- Hexagon drawn as an SVG polygon: stroke only, no fill -->
+          <svg class="hex" width="224" height="66" viewBox="0 0 224 66" role="img" aria-label="Code 473">
+            <polygon points="20,2 204,2 222,33 204,64 20,64 2,33" />
+            <text x="112" y="43" text-anchor="middle">CODE:473</text>
+          </svg>
+          <div class="mono-small">
+            <div>PRIORITY A-1</div>
+            <div>AUTH LEVEL 00</div>
+          </div>
+        </div>
+
+        <div class="sector">
+          <div class="sector__jp" lang="ja">第3区画</div>
+          <div class="sector__en">SECTOR 03</div>
+        </div>
+      </header>
+
+      <!-- ROW 2: the main message -->
+      <section class="row-middle">
+        <h1 class="title-jp" lang="ja">警告</h1>
+        <div class="title-en blink">WARNING</div>
+        <div class="subtitle">
+          <span class="subtitle__jp" lang="ja">侵入を検知</span>
+          <span class="subtitle__en">INTRUSION DETECTED</span>
+        </div>
+      </section>
+
+      <!-- ROW 3: status lines (left) and countdown (right) -->
+      <footer class="row-bottom">
+        <div class="mono-small mono-small--status">
+          <div>LOCK STATUS .... ENGAGED</div>
+          <div>OUTER SHUTTER .. OPEN</div>
+          <div>AUTO RESPONSE .. STANDBY</div>
+        </div>
+
+        <div class="countdown">
+          <div class="countdown__tag">
+            <div class="countdown__tag-jp" lang="ja">隔壁閉鎖</div>
+            <div class="countdown__tag-en">SEAL IN</div>
+          </div>
+          <div class="countdown__time">00:00:30</div>
+        </div>
+      </footer>
+
+    </div>
+
+    <!-- Scanline: a faint translucent band that slides down the screen -->
+    <div class="sweep"></div>
+
+  </main>
+
+</body>
+</html>

@@ -1,0 +1,274 @@
+/* =========================================================
+   NGE WARNING SCREEN STUDY
+   Pure CSS. No JavaScript.
+   Read top to bottom: variables, layout, type, graphics, motion.
+   ========================================================= */
+
+
+/* ---------- 1. VARIABLES ----------
+   Change --accent once and every red element updates.
+   Try #ff8a00 (orange) or #e8e8e8 (white) to compare palettes. */
+:root {
+  --accent: #ff3b1f;
+  --ink: #f1eee6;        /* off-white used for text */
+  --bg: #000000;
+
+  --font-jp: 'Shippori Mincho B1', serif;
+  --font-label: 'Archivo Narrow', sans-serif;
+  --font-mono: 'Share Tech Mono', monospace;
+}
+
+body {
+  margin: 0;
+  background: #0a0a0a;   /* page behind the screen, slightly lighter so the edge is visible */
+}
+
+
+/* ---------- 2. THE SCREEN ----------
+   Fixed size, position: relative so children can be placed with
+   absolute offsets, overflow: hidden so the scanline never leaks out. */
+.screen {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+
+/* ---------- 3. HAZARD STRIPES ----------
+   Hard color stops (16px, then 16px again) give sharp stripes.
+   If the stops were different values the stripes would blend. */
+.hazard {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 22px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--accent) 0,
+    var(--accent) 16px,
+    var(--bg) 16px,
+    var(--bg) 32px
+  );
+}
+.hazard--top    { top: 0; }
+.hazard--bottom { bottom: 0; }
+
+
+/* ---------- 4. FRAME AND ROW LAYOUT ----------
+   The frame is placed with fixed edge offsets.
+   justify-content: space-between pushes three child rows to the
+   top, middle, and bottom. This one line creates the composition. */
+.frame {
+  position: absolute;
+  inset: 44px 40px;                 /* top/bottom 44px, left/right 40px */
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.row-top,
+.row-bottom {
+  display: flex;
+  justify-content: space-between;
+}
+.row-top    { align-items: flex-start; }
+.row-bottom { align-items: flex-end; }
+
+.row-middle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+
+/* ---------- 5. TYPE: THE CORE OF THE LOOK ---------- */
+
+/* Giant title. Four things create the compressed feel:
+   large size, negative letter-spacing, tight line-height, slight horizontal squash. */
+.title-jp {
+  margin: 0;
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 270px;
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+  color: var(--accent);
+  transform: scaleX(0.92);
+}
+
+/* Wide tracking adds space after the LAST letter too.
+   padding-left with the same value balances it so the word
+   stays optically centered. Easy to miss. */
+.title-en {
+  margin-top: 6px;
+  padding-left: 0.5em;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 54px;
+  line-height: 1;
+  letter-spacing: 0.5em;
+}
+
+.subtitle {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-top: 20px;
+}
+.subtitle__jp {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 40px;
+  letter-spacing: -0.02em;
+}
+/* Tiny and widely tracked: the contrast with the huge title creates the drama */
+.subtitle__en {
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.4em;
+}
+
+.sector { text-align: right; }
+.sector__jp {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.sector__en {
+  margin-top: 4px;
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.42em;
+  color: var(--accent);
+}
+
+.mono-small {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.12em;
+}
+.mono-small--status {
+  line-height: 1.6;
+  letter-spacing: 0.1em;
+}
+
+
+/* ---------- 6. GRAPHIC PIECES ---------- */
+
+.code-group {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Hexagon: stroke only. Styling SVG parts uses stroke/fill, not border/background. */
+.hex polygon {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.hex text {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: 4px;
+  fill: var(--ink);
+}
+
+/* Countdown box: an outlined container with an INVERTED tag
+   (colored background, black text). The color swap is a typical NGE move. */
+.countdown {
+  display: flex;
+  align-items: stretch;
+  border: 2px solid var(--accent);
+}
+.countdown__tag {
+  background: var(--accent);
+  color: var(--bg);
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.countdown__tag-jp {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1.1;
+}
+.countdown__tag-en {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+}
+.countdown__time {
+  display: flex;
+  align-items: center;
+  padding: 6px 20px;
+  font-family: var(--font-mono);
+  font-size: 52px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+
+/* ---------- 7. MOTION ----------
+   Three @keyframes. Each is a small, separate idea. */
+
+/* BLINK: steps(1) switches hard between states instead of fading.
+   A smooth fade would look wrong here. */
+@keyframes blink {
+  0%, 49%    { opacity: 1; }
+  50%, 100%  { opacity: 0; }
+}
+.blink { animation: blink 1s steps(1) infinite; }
+
+/* FLICKER: stays at full opacity for most of the cycle, with brief dips.
+   Subtle is the point. More dips quickly look cheap. */
+@keyframes flicker {
+  0%, 92%, 100% { opacity: 1; }
+  94%           { opacity: 0.82; }
+  96%           { opacity: 1; }
+  98%           { opacity: 0.9; }
+}
+.flicker { animation: flicker 5s linear infinite; }
+
+/* SCANLINE: a translucent band slides from above the screen to below it.
+   Slow and linear so it reads as a background detail, not an effect. */
+.sweep {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 160px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;      /* never blocks clicks on anything underneath */
+  animation: sweep 7s linear infinite;
+}
+@keyframes sweep {
+  0%   { top: -160px; }
+  100% { top: 720px; }
+}
+
+/* Good habit: respect users who turn off motion in their system settings */
+@media (prefers-reduced-motion: reduce) {
+  .blink, .flicker, .sweep { animation: none; }
+}
