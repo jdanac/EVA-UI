@@ -11,6 +11,7 @@
 
   <link rel="stylesheet" href="style.css">
   <script src="script.js" defer></script>
+  <script src="webgl.js" defer></script>
 </head>
 <body>
 
@@ -88,11 +89,13 @@
     </dl>
 
     <!-- Controls. Hidden until script.js runs, since nothing here works without it.
-         Each computer votes at random unless its menu is set to approve or deny. -->
+         Type any motion or question and the three computers vote on it, like a magic
+         8-ball with a council. Each votes at random unless its menu forces approve
+         or deny. -->
     <form class="controls" novalidate hidden>
       <label class="field field--motion">
-        <span class="field__label">MOTION</span>
-        <input class="field__input" id="motion" type="text" maxlength="22" autocomplete="off" spellcheck="false" value="SELFDESTRUCTION">
+        <span class="field__label">MOTION OR QUESTION</span>
+        <input class="field__input" id="motion" type="text" maxlength="44" placeholder="TYPE A QUESTION" autocomplete="off" spellcheck="false" value="SELFDESTRUCTION">
       </label>
 
       <label class="field">

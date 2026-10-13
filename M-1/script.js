@@ -19,10 +19,33 @@ const submitBtn = document.querySelector('#submit');
 const resetBtn = document.querySelector('#reset');
 const statusLine = document.querySelector('#status');
 
-const VOTES = {
-  approve: { jp: '承認', en: 'Approved', verb: 'approves' },
-  deny:    { jp: '否定', en: 'Denied',   verb: 'denies' },
+// How a vote is worded. A preset is a motion, which is approved or denied;
+// anything the person types is a question, which is answered yes or no.
+// (The vote itself is always approve or deny, so CSS and webgl.js never change.)
+const WORDS = {
+  motion: {
+    approve: { jp: '承認', en: 'Approved', verb: 'approves',  verdict: 'APPROVED', menu: 'APPROVE' },
+    deny:    { jp: '否定', en: 'Denied',   verb: 'denies',    verdict: 'DENIED',   menu: 'DENY' },
+  },
+  question: {
+    approve: { jp: '肯定', en: 'Yes',      verb: 'says yes',  verdict: 'YES',      menu: 'YES' },
+    deny:    { jp: '否定', en: 'No',       verb: 'says no',   verdict: 'NO',       menu: 'NO' },
+  },
 };
+
+// Motions the council can be asked to rule on. After each run the field picks
+// the next one at random, unless the person has typed their own.
+const MOTIONS = [
+  'SELFDESTRUCTION',
+  'LAUNCH EVA-01',
+  'LAUNCH EVA-02',
+  'SEAL GEOFRONT',
+  'EVACUATE TOKYO-3',
+  'DEPLOY N2 MINE',
+  'LOCKDOWN',
+  'CEASE FIRE',
+  'RESTRICT ACCESS',
+];
 
 // Each computer takes between MIN_MS and MIN_MS + SPAN_MS to decide
 const MIN_MS = 1800;
@@ -39,6 +62,9 @@ const nodes = [...document.querySelectorAll('.node')].map(el => ({
 }));
 
 let state = 'idle';   // idle, processing or resolved
+let presetMotion = MOTIONS[0];   // the motion the field last filled in itself
+let ranOnce = false;
+let words = WORDS.motion;   // the wording of the run in progress, fixed when it starts
 
 
 /* ---------- DISPLAY ----------
@@ -48,8 +74,8 @@ function showNode(node, status, vote) {
   node.el.dataset.status = status;
   if (vote) {
     node.el.dataset.vote = vote;
-    node.stampJp.textContent = VOTES[vote].jp;
-    node.stampEn.textContent = VOTES[vote].en;
+    node.stampJp.textContent = words[vote].jp;
+    node.stampEn.textContent = words[vote].en;
   } else {
     delete node.el.dataset.vote;
     node.stampJp.textContent = '';
@@ -81,6 +107,20 @@ function syncControls() {
   resetBtn.disabled = state === 'idle';
 }
 
+// The wording that fits what is in the field right now
+function wordsFor(text) {
+  return MOTIONS.includes(text.trim()) ? WORDS.motion : WORDS.question;
+}
+
+// The menus offer APPROVE and DENY for a motion, YES and NO for a question
+function labelMenus() {
+  const w = wordsFor(motionInput.value);
+  nodes.forEach(n => {
+    n.pick.querySelector('[value="approve"]').textContent = w.approve.menu;
+    n.pick.querySelector('[value="deny"]').textContent = w.deny.menu;
+  });
+}
+
 
 /* ---------- DELIBERATION ----------
    SUBMIT sets every plate to processing and gives each its own timer. When a
@@ -88,6 +128,11 @@ function syncControls() {
    flip. When all three have voted, two of three decides. */
 function start() {
   if (state === 'processing' || motionInput.value.trim() === '') return;
+
+  // After the first run, an untouched motion is swapped for a different one
+  if (ranOnce && motionInput.value === presetMotion) setMotion(nextMotion());
+  ranOnce = true;
+  words = wordsFor(motionInput.value);
 
   nodes.forEach(n => {
     clearTimeout(n.timer);
@@ -100,11 +145,30 @@ function start() {
   resetBtn.focus();                  // SUBMIT and the menus are now disabled
 }
 
+function nextMotion() {
+  const others = MOTIONS.filter(m => m !== presetMotion);
+  return others[Math.floor(Math.random() * others.length)];
+}
+
+// The result box shows the motion on one line, or on two smaller lines once it
+// is too long to fit
+function showMotion(text) {
+  motionText.textContent = text;
+  motionText.closest('.tag').dataset.size = text.length > 22 ? 'long' : 'short';
+}
+
+function setMotion(text) {
+  presetMotion = text;
+  motionInput.value = text;
+  showMotion(text);
+  labelMenus();
+}
+
 function castVote(node) {
   const pick = node.pick.value;
   const vote = pick === 'auto' ? (Math.random() < 0.5 ? 'approve' : 'deny') : pick;
   showNode(node, 'voted', vote);
-  announce(`${node.name} ${VOTES[vote].verb}.`);
+  announce(`${node.name} ${words[vote].verb}.`);
 
   if (nodes.every(n => n.el.dataset.status === 'voted')) resolve();
 }
@@ -114,8 +178,9 @@ function resolve() {
   const no = nodes.length - yes;
   const outcome = yes > no ? 'approve' : 'deny';
 
-  showVerdict(outcome, `${outcome === 'approve' ? 'APPROVED' : 'DENIED'} ${yes}-${no}`);
-  announce(`Motion ${outcome === 'approve' ? 'approved' : 'denied'}, ${Math.max(yes, no)} to ${Math.min(yes, no)}.`);
+  const word = words[outcome].verdict;
+  showVerdict(outcome, `${word} ${yes}-${no}`);
+  announce(`${word.charAt(0) + word.slice(1).toLowerCase()}, ${Math.max(yes, no)} to ${Math.min(yes, no)}.`);
   setState('resolved');
 }
 
@@ -134,12 +199,22 @@ controls.addEventListener('submit', e => {
   e.preventDefault();
   start();
 });
-resetBtn.addEventListener('click', () => reset());
+// RESET also puts the field back to presets: it fills in a fresh random motion,
+// even if the person had typed their own, and the next run uses it as shown
+resetBtn.addEventListener('click', () => {
+  reset();
+  setMotion(nextMotion());
+  ranOnce = false;
+});
+
+// Clicking into the field selects the text, so typing replaces the preset
+motionInput.addEventListener('focus', () => setTimeout(() => motionInput.select()));
 
 // Typing a new motion clears an old result, and the result box follows the field
 motionInput.addEventListener('input', () => {
   motionInput.value = motionInput.value.toUpperCase();
-  motionText.textContent = motionInput.value.trim();
+  showMotion(motionInput.value.trim());
+  labelMenus();
   if (state === 'resolved') reset(false);
   else syncControls();
 });
@@ -163,6 +238,6 @@ fit();
 
 
 /* ---------- START UP ---------- */
-motionText.textContent = motionInput.value.trim();
+setMotion(MOTIONS[0]);
 reset(false);
 controls.hidden = false;

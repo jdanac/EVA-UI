@@ -60,6 +60,16 @@ body {
   font-weight: 700;
 }
 
+/* The WebGL canvas (made by webgl.js) sits behind everything else on the
+   stage. It is drawn at the stage's own 1280x720 and zoomed with it. */
+.fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -107,6 +117,14 @@ body {
   font-size: 30px;
 }
 .tag__big--lg { font-size: 29px; line-height: 1.3; overflow: hidden; }
+/* A long motion or question drops to two smaller lines, which wrap anywhere so
+   one long word cannot overflow the box */
+.tag--result[data-size="long"] .tag__big--lg {
+  font-size: 22px;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .tag--verdict { width: 346px; padding-top: 8px; padding-bottom: 10px; }
 
 /* The two capsules at the ends of the result box */
@@ -193,7 +211,7 @@ body {
   filter: drop-shadow(0 0 4px var(--teal-glow)) drop-shadow(0 0 12px var(--teal-glow));
 }
 .node__shape polygon {
-  fill: #000;
+  fill: transparent;     /* so the WebGL backdrop shows inside the plates */
   stroke: var(--teal);
   stroke-width: 7;
   stroke-linejoin: miter;
@@ -257,6 +275,7 @@ body {
   place-items: center;
   border: 3px solid var(--teal);
   border-radius: 9px;
+  background: #000;      /* hides the data line behind the stamp */
   color: var(--teal-pale);
   font-family: var(--font-jp);
   font-weight: 800;
@@ -290,7 +309,7 @@ body {
    teal fill, a hard on/off beat like the blink in C-1. Each one runs at its
    own speed so they drift out of step. */
 @keyframes scan {
-  0%, 49%   { fill: #000; }
+  0%, 49%   { fill: transparent; }
   50%, 100% { fill: rgba(127, 240, 216, 0.2); }
 }
 .node[data-status="processing"] .node__shape polygon {
@@ -373,6 +392,7 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.field__input::placeholder { color: var(--teal-dim); opacity: 1; }
 .field__input:focus { outline: none; }   /* the field box shows focus instead */
 
 /* The menus keep a custom caret, since appearance: none drops the native one */
