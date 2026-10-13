@@ -7,14 +7,14 @@
 //       Roads, rivers, water and peaks from OpenStreetMap through Overpass
 //       (ODbL: the page must credit "OpenStreetMap contributors").
 //
-// Writes M-2/data/<name>.js containing:  GEO.<name> = { bbox, ... }
+// Writes t-1/data/<name>.js containing:  GEO.<name> = { bbox, ... }
 // Coordinates are [lon, lat], rounded to keep the files small.
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'M-2', 'data');
+const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 't-1', 'data');
 const UA = 'eva-ui-study/0.1 (personal UI study; github jdanac/EVA-UI)';   // Overpass refuses requests without one
 
 const [mode, name, ...rest] = process.argv.slice(2);

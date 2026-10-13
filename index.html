@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EVA-UI</title>
+  <meta name="description" content="Recreations of Neon Genesis Evangelion style screens in HTML, CSS and vanilla JavaScript.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=Share+Tech+Mono&family=Shippori+Mincho+B1:wght@800&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="index">
+
+    <header class="head">
+      <p class="eyebrow">NEON GENESIS EVANGELION <span class="eyebrow__sep">/</span> INTERFACE STUDIES</p>
+      <h1 class="title">
+        <span class="title__en">EVA-UI</span>
+        <span class="title__jp" lang="ja">研究</span>
+      </h1>
+      <p class="lede">Screens recreated in plain HTML and CSS, with vanilla JavaScript where a screen needs to move. No build step, no libraries. Each study opens on its own.</p>
+    </header>
+
+    <!-- ================= STUDY LIST =================
+         This is the only part of the page to edit when a study is added.
+         Copy a whole <li> block below, paste it where it belongs, then change:
+
+           href        the study folder, lowercase, with a trailing slash.
+                       Keep it relative (no leading slash) so it works on a
+                       project site such as user.github.io/EVA-UI/.
+           .code       the study code, uppercase (W-1, C-1, M-1, T-1, ...).
+           .name       English name. .name__jp is its Japanese label.
+           .note       one line on what it is or what it teaches.
+           .tech       what it is built with, as plain text.
+
+         To list a study that is not ready yet, use <div class="study" data-soon>
+         in place of <a class="study" href="...">, and close it with </div>.
+         It shows dimmed with a SOON mark and is not a link.
+
+         Template:
+
+         <li>
+           <a class="study" href="x-1/">
+             <span class="code">X-1</span>
+             <span class="body">
+               <span class="name">Name <span class="name__jp" lang="ja">日本語</span></span>
+               <span class="note">One line about it.</span>
+             </span>
+             <span class="tech">HTML / CSS</span>
+           </a>
+         </li>
+    -->
+    <ol class="studies">
+
+      <li>
+        <a class="study" href="w-1/">
+          <span class="code">W-1</span>
+          <span class="body">
+            <span class="name">Warning <span class="name__jp" lang="ja">警告</span></span>
+            <span class="note">Intrusion alert with a sector label and a live seal countdown.</span>
+          </span>
+          <span class="tech">HTML / CSS / JS</span>
+        </a>
+      </li>
+
+      <li>
+        <a class="study" href="c-1/">
+          <span class="code">C-1</span>
+          <span class="body">
+            <span class="name">Countdown <span class="name__jp" lang="ja">設定時間</span></span>
+            <span class="note">Seven-segment active time display. Set a time, press START, and it counts down in milliseconds.</span>
+          </span>
+          <span class="tech">HTML / CSS / JS</span>
+        </a>
+      </li>
+
+      <li>
+        <a class="study" href="m-1/">
+          <span class="code">M-1</span>
+          <span class="body">
+            <span class="name">MAGI <span class="name__jp" lang="ja">承認</span></span>
+            <span class="note">Three computers deliberate on a motion and vote, two of three decides. WebGL backdrop drawn from the page state.</span>
+          </span>
+          <span class="tech">HTML / CSS / JS / WebGL</span>
+        </a>
+      </li>
+
+      <li>
+        <a class="study" href="t-1/">
+          <span class="code">T-1</span>
+          <span class="body">
+            <span class="name">Tactical map <span class="name__jp" lang="ja">箱根</span></span>
+            <span class="note">Japan, Kanto and Hakone drawn as SVG from baked map data. Detect a contact and watch Tokyo-3 hold or breach.</span>
+          </span>
+          <span class="tech">HTML / CSS / JS / SVG</span>
+        </a>
+      </li>
+
+    </ol>
+
+    <footer class="foot">
+      <p>Unofficial fan studies. Not affiliated with Khara, Gainax or any rights holder.</p>
+      <p><a href="https://github.com/jdanac/EVA-UI">Source on GitHub</a></p>
+    </footer>
+
+  </main>
+</body>
+</html>
