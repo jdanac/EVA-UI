@@ -49,11 +49,43 @@
     </section>
 
     <section class="panel panel--hakone" data-region="hakone" role="img" aria-label="Map of the Hakone region with the city of Tokyo-3">
-      <svg viewBox="0 0 916 584" aria-hidden="true"></svg>
+      <svg viewBox="0 0 916 540" aria-hidden="true"></svg>
+
+      <!-- Event log, over the top right corner of the map. script.js adds an entry
+           for each event and the log is read aloud as it grows. -->
+      <aside class="log-box">
+        <h2 class="log-box__head"><span lang="ja">事象記録</span> EVENT LOG</h2>
+        <ol class="log" id="log" role="log" aria-label="Event log"></ol>
+      </aside>
+
       <p class="panel__tag"><span lang="ja">箱根</span> HAKONE <span class="panel__sep">/</span> <span lang="ja">第参新東京市</span> TOKYO-3</p>
     </section>
 
-    <!-- Bottom strip: four boxes, each a tag over a body -->
+    <!-- Controls, under the Hakone map. Hidden until script.js runs, since nothing
+         here works without it. Pick where the contact comes from and how it ends, or
+         leave both on random, then detect it. -->
+    <form class="controls" novalidate hidden>
+      <label class="field">
+        <span class="field__label">CONTACT FROM</span>
+        <select class="field__input" id="pick-origin">
+          <option value="auto">RANDOM</option>
+          <option value="sagami">SAGAMI BAY</option><option value="suruga">SURUGA BAY</option>
+          <option value="n">NORTH</option><option value="ne">NORTHEAST</option><option value="e">EAST</option><option value="se">SOUTHEAST</option>
+          <option value="s">SOUTH</option><option value="sw">SOUTHWEST</option><option value="w">WEST</option><option value="nw">NORTHWEST</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field__label">OUTCOME</span>
+        <select class="field__input" id="pick-outcome">
+          <option value="auto">RANDOM</option><option value="contained">CONTAINED</option><option value="breach">BREACH</option>
+        </select>
+      </label>
+      <button class="btn" id="start" type="submit">DETECT</button>
+      <button class="btn" id="reset" type="button">RESET</button>
+    </form>
+
+    <!-- Bottom strip: four boxes, each a tag over a body. script.js changes the
+         status words in it as the scenario runs. -->
     <footer class="strip">
 
       <section class="cell cell--geofront">
@@ -62,7 +94,7 @@
           <dt>SURFACE</dt>        <dd>GL ±0</dd>
           <dt>MAIN SHAFT</dt>     <dd>GL -1400M</dd>
           <dt>CENTRAL DOGMA</dt>  <dd>GL -1500M</dd>
-          <dt>NERV HQ</dt>        <dd>ONLINE</dd>
+          <dt>NERV HQ</dt>        <dd id="hq">ONLINE</dd>
         </dl>
       </section>
 
@@ -73,7 +105,7 @@
           <div class="city__read">
             <p class="city__label">POPULATION</p>
             <p class="city__num">891285</p>
-            <p class="city__safe"><span lang="ja">安全</span> SAFE</p>
+            <p class="city__safe" id="safe" data-status="idle"><span lang="ja">安全</span> SAFE</p>
           </div>
         </div>
       </section>
@@ -81,9 +113,9 @@
       <section class="cell cell--eva">
         <h2 class="cell__tag"><span lang="ja">EVA状態</span> EVA STATUS</h2>
         <ul class="cell__body units">
-          <li data-status="repair"><span>EVA-00</span> <b>REPAIR</b></li>
-          <li data-status="repair"><span>EVA-01</span> <b>REPAIR</b></li>
-          <li data-status="standby"><span>EVA-02</span> <b>STANDBY</b></li>
+          <li data-unit="eva00" data-status="repair"><span>EVA-00</span> <b>REPAIR</b></li>
+          <li data-unit="eva01" data-status="repair"><span>EVA-01</span> <b>REPAIR</b></li>
+          <li data-unit="eva02" data-status="standby"><span>EVA-02</span> <b>STANDBY</b></li>
         </ul>
       </section>
 
@@ -95,6 +127,7 @@
           <p><i class="key key--river"></i>RIVER</p>
           <p><i class="key key--water"></i>SEA / LAKE</p>
           <p><i class="key key--box"></i>NEXT VIEW</p>
+          <p><i class="key key--site"></i>SITE</p>
           <p class="legend__credit">MAP DATA &copy; OPENSTREETMAP CONTRIBUTORS, NATURAL EARTH</p>
         </div>
       </section>
@@ -103,7 +136,7 @@
 
   </main>
 
-  <!-- Phone in portrait only: covers the screen and asks for landscape (style.css section 6) -->
+  <!-- Phone in portrait only: covers the screen and asks for landscape (style.css section 7) -->
   <div class="rotate">
     <div class="rotate__icon" aria-hidden="true"></div>
     <div class="rotate__jp" lang="ja">画面を横向きにしてください</div>

@@ -12,7 +12,8 @@
   --amber-dim: #5c3c0c;   /* graticule and secondary lines */
   --cyan: #22d3cc;        /* water, rivers */
   --cyan-dim: #0d4f4c;
-  --alert: #ff3b1f;
+  --alert: #ff3b1f;       /* breach, the contact, danger */
+  --warn: #ffc23d;        /* alert: a yellower amber than the map lines, so markers stand out from them */
   --ok: #3ee08a;
   --ink: #f1eee6;
   --bg: #000000;
@@ -69,12 +70,19 @@ body {
 }
 .panel--kanto  { left: 0;   top: 0;   width: 360px; height: 358px; }
 .panel--japan  { left: 0;   top: 362px; width: 360px; height: 358px; }
-.panel--hakone { left: 364px; top: 0; width: 916px; height: 584px; }
+.panel--hakone { left: 364px; top: 0; width: 916px; height: 540px; }
 
 .panel svg {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* The second svg, with the moving parts, lies over everything in the panel */
+.panel svg.live {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 /* The amber frame is drawn over the map, not as a border, so the svg can use
@@ -335,7 +343,232 @@ body {
 }
 
 
-/* ---------- 6. FIT TO THE WINDOW ----------
+/* ---------- 6. LIVE LAYER: SITES, CONTACT, LOG, CONTROLS ----------
+   Everything that changes while a scenario runs. script.js sets data-status
+   (idle, alert or breach) on a site, and data-level on the screen for the
+   highest one; the colors and pulses below follow from those alone. */
+.site, .city, .geofront { --st: var(--cyan); }
+[data-status="alert"]  { --st: var(--warn); }
+[data-status="breach"] { --st: var(--alert); }
+
+/* Frames turn red once anything is breached */
+.screen[data-level="breach"] .panel::after { border-color: var(--alert); }
+
+/* A site: a diamond (battery) or a circle (radar) with a ring that pulses once
+   it is no longer idle. Idle is hollow, alert and breach are filled. */
+.site__mark {
+  fill: var(--bg);
+  stroke: var(--st);
+  stroke-width: 1.8;
+}
+.site:not([data-status="idle"]) .site__mark { fill: var(--st); }
+.site__ring {
+  fill: none;
+  stroke: var(--st);
+  stroke-width: 1.3;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.site:not([data-status="idle"]) .site__ring { animation: pulse 1.6s ease-out infinite; }
+.site[data-status="breach"] .site__ring { animation-duration: 0.8s; }
+.site__ja, .site__en {
+  fill: var(--st);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+.site__ja { font-family: var(--font-jp); font-weight: 800; font-size: 11px; }
+.site__en { font-family: var(--font-label); font-weight: 700; font-size: 8px; letter-spacing: 0.14em; }
+
+/* Tokyo-3 and the Geofront take the same colors. The city ring only shows once
+   the city is under threat. */
+.city .city__ring {
+  fill: none;
+  stroke: var(--st);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 6;
+  opacity: 0;
+}
+.city:not([data-status="idle"]) .city__ring { opacity: 0.9; }
+.city[data-status="breach"] .glow > path { stroke: var(--alert); }
+.city .geofront circle { stroke: var(--amber); }
+.city .geofront:not([data-status="idle"]) circle { stroke: var(--st); }
+.city .geofront[data-status="breach"] circle:last-child { fill: var(--alert); }   /* only the inner circle fills */
+
+/* The unknown contact, the path it is expected to take, and the part it has
+   already covered */
+.route, .trail { fill: none; stroke: var(--alert); stroke-linejoin: round; }
+.route { stroke-width: 1.2; stroke-dasharray: 5 5; opacity: 0.55; }
+.trail { stroke-width: 2.4; }
+.contact[data-active="false"], .shot:not([data-on="true"]) { display: none; }
+.contact__dot { fill: var(--alert); }
+.contact__ring {
+  fill: none;
+  stroke: var(--alert);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse 1.2s ease-out infinite;
+}
+.contact__label {
+  fill: var(--alert);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+/* A battery firing at the contact */
+.shot {
+  stroke: var(--warn);
+  stroke-width: 1.8;
+  stroke-dasharray: 6 6;
+  animation: shot 0.35s linear infinite;
+}
+
+@keyframes pulse {
+  0%   { transform: scale(0.5); opacity: 0.9; }
+  100% { transform: scale(2);   opacity: 0; }
+}
+@keyframes shot {
+  to { stroke-dashoffset: -12; }
+}
+
+/* Event log: a red-framed box over the top right of the map. Newest first;
+   each entry is boxed in the color of its level. */
+.log-box {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 244px;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 2px solid var(--alert);
+}
+.log-box__head {
+  margin: 0;
+  padding: 3px 10px;
+  background: var(--alert);
+  color: var(--bg);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+}
+.log-box__head [lang="ja"] {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  margin-right: 4px;
+}
+.log {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  height: 206px;
+  overflow: hidden;
+  /* Older entries fade out at the bottom instead of being cut off mid-line */
+  -webkit-mask-image: linear-gradient(#000 78%, transparent);
+  mask-image: linear-gradient(#000 78%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.log li {
+  --st: var(--cyan);
+  flex: none;
+  padding: 3px 8px 4px;
+  border: 1.5px solid var(--st);
+  border-radius: 3px;
+  color: var(--st);
+}
+.log li[data-level="alert"]  { --st: var(--warn); }
+.log li[data-level="breach"] { --st: var(--alert); }
+.log time { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; opacity: 0.8; }
+.log__ja { font-family: var(--font-jp); font-weight: 800; font-size: 12px; margin-right: 6px; }
+.log__en { font-family: var(--font-label); font-weight: 500; font-size: 9px; letter-spacing: 0.12em; }
+
+/* Controls: one bar under the Hakone map, in the same outlined style as the
+   strip. 40px tall, which is also the tap height. */
+.controls {
+  position: absolute;
+  left: 364px;
+  top: 544px;
+  width: 916px;
+  height: 40px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 120px 120px;
+  gap: 4px;
+}
+.controls[hidden] { display: none; }
+.field {
+  display: flex;
+  align-items: stretch;
+  border: 2px solid var(--amber);
+  min-width: 0;
+}
+.field__label {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: var(--amber);
+  color: var(--bg);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+}
+.field__input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+}
+.btn {
+  border: 2px solid var(--amber);
+  background: var(--bg);
+  color: var(--amber);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.3em;
+  padding: 0 0 0 0.3em;   /* offsets the trailing letter space so the word stays centered */
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--amber); color: var(--bg); }
+.btn:disabled, .field__input:disabled { opacity: 0.4; cursor: default; }
+.btn:focus-visible, .field__input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -4px;
+}
+
+/* Strip words that change with the scenario */
+.city__safe[data-status="alert"]  { border-color: var(--warn);  color: var(--warn); }
+.city__safe[data-status="breach"] { border-color: var(--alert); color: var(--alert); }
+.units [data-status="sortie"] b { color: var(--warn); }
+.key--site { height: 8px; width: 8px; border: 1.8px solid var(--cyan); transform: rotate(45deg); margin: 0 4px; }
+
+/* Motion is switched off for people who ask: the pulses and the firing dashes
+   stop, and the rings show as steady outlines instead */
+@media (prefers-reduced-motion: reduce) {
+  .site__ring, .contact__ring, .shot { animation: none; }
+  .site:not([data-status="idle"]) .site__ring, .contact__ring { opacity: 0.6; transform: scale(1.4); }
+}
+
+
+/* ---------- 7. FIT TO THE WINDOW ----------
    script.js sets --scale on the root to the largest value that fits the
    1280x720 stage in the window, and .screen applies it with zoom. Zoom, unlike
    transform, changes the layout size too, so the centering in section 2 keeps

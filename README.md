@@ -9,4 +9,4 @@ Each study is a folder named for its screen type plus a number. Open its `index.
 | `W-1` | Warning screen: intrusion alert with a sector label and a live seal countdown |
 | `C-1` | Countdown screen: seven-segment active time display. Enter a time, press START, and it counts down in milliseconds |
 | `M-1` | MAGI screen: the three supercomputers (Melchior, Balthasar, Casper) and their votes. Submit a motion and each computer processes, then votes; two of three decides. A WebGL backdrop draws a hex field and data lines from the state |
-| `M-2` | Tactical map: Japan, Kanto and a Hakone close-up with Tokyo-3, drawn as SVG from real coastline and OpenStreetMap data baked by `tools/geo.mjs` |
+| `M-2` | Tactical map: Japan, Kanto and a Hakone close-up with Tokyo-3, drawn as SVG from real coastline and OpenStreetMap data baked by `tools/geo.mjs`. Detect an unknown contact and watch the sites around the city go to alert, the batteries fire, and it is contained or breaches |
