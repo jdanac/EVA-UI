@@ -13,6 +13,12 @@
   <script src="script.js" defer></script>
 </head>
 <body>
+  <!-- Back to the dashboard. Outside the screen on purpose; see .menu in style.css.
+       index.html is spelled out so it also works when opened from disk. -->
+  <a class="menu" href="../index.html" aria-label="EVA-UI dashboard, all studies">
+    <span>DASHBOARD</span><span class="menu__jp" lang="ja" aria-hidden="true">管制盤</span>
+  </a>
+
 
   <!-- The screen: a fixed 1280x720 box (scaled to fit the window by script.js) with the rainbow gradient as its background.
        script.js sets data-state here: idle, running or done. -->

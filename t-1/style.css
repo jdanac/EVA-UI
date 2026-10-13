@@ -8,6 +8,7 @@
 
 /* ---------- 1. VARIABLES ---------- */
 :root {
+  --menu: #ffc23d;      /* the dashboard button: same yellow on every study */
   --amber: #ffa31a;       /* land, roads, grid, tags */
   --amber-dim: #5c3c0c;   /* graticule and secondary lines */
   --cyan: #22d3cc;        /* water, rivers */
@@ -60,6 +61,48 @@ body {
   zoom: var(--scale, 1); /* set by script.js to fit the window, see section 6 */
 }
 
+
+/* The way back to the dashboard (the homepage). It sits outside the screen,
+   pinned to the corner of the window, so it is never scaled or clipped with
+   the stage and takes up no room in the centered layout. The yellow is the
+   same on every study so it reads as the site's own control, not part of the
+   screen. The black fill keeps the registration marks from showing through. */
+.menu {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 12px 5px 10px;
+  background: #000;
+  border: 1px solid var(--menu);
+  color: var(--menu);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  text-decoration: none;
+}
+.menu::before {                  /* small left-pointing arrow: "back" */
+  content: "";
+  border: 5px solid transparent;
+  border-left: 0;
+  border-right: 7px solid currentColor;
+}
+.menu__jp {
+  padding-left: 10px;
+  border-left: 1px solid var(--menu);
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+.menu:hover, .menu:focus-visible { background: var(--menu); color: #000; }
+.menu:hover .menu__jp, .menu:focus-visible .menu__jp { border-left-color: #000; }
+.menu:focus-visible { outline: 2px solid var(--menu); outline-offset: 3px; }
 
 /* ---------- 3. PANELS ----------
    Left column: Kanto over Japan. Right: Hakone, with the strip under it.
