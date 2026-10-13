@@ -1,0 +1,390 @@
+/* =========================================================
+   NGE TACTICAL MAP STUDY
+   script.js draws the maps as SVG from baked data; this file styles every line
+   of them, so a color change here recolors the whole map.
+   Read top to bottom: variables, screen, panels, map layers, strip, fit.
+   ========================================================= */
+
+
+/* ---------- 1. VARIABLES ---------- */
+:root {
+  --amber: #ffa31a;       /* land, roads, grid, tags */
+  --amber-dim: #5c3c0c;   /* graticule and secondary lines */
+  --cyan: #22d3cc;        /* water, rivers */
+  --cyan-dim: #0d4f4c;
+  --alert: #ff3b1f;
+  --ok: #3ee08a;
+  --ink: #f1eee6;
+  --bg: #000000;
+
+  --font-jp: 'Shippori Mincho B1', serif;
+  --font-label: 'Archivo Narrow', sans-serif;
+  --font-mono: 'Share Tech Mono', monospace;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: grid;         /* with margin: auto on .screen, centers it both ways */
+  background-color: #0a0a0a;
+
+  /* Registration marks, as in C-1 and W-1: one 48px tile with a 1px cross,
+     centered. #584410 is a dim amber; an SVG url cannot read a CSS variable,
+     so the hex is written out as %23584410. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M19 24.5h10M24.5 19v10' stroke='%23584410' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-position: center;
+}
+
+/* Holds the hatch pattern. Zero size but not display: none, which would stop
+   the maps from finding it. */
+.defs { position: absolute; }
+#hatch path {
+  stroke: var(--cyan);
+  stroke-width: 1.4;
+  opacity: 0.55;
+}
+
+
+/* ---------- 2. THE SCREEN ----------
+   Fixed size. The panels are placed with absolute offsets inside it. */
+.screen {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+  margin: auto;          /* centers both ways; in a small window it drops to zero and the page scrolls */
+  zoom: var(--scale, 1); /* set by script.js to fit the window, see section 6 */
+}
+
+
+/* ---------- 3. PANELS ----------
+   Left column: Kanto over Japan. Right: Hakone, with the strip under it.
+   4px of black between them. */
+.panel {
+  position: absolute;
+  overflow: hidden;
+}
+.panel--kanto  { left: 0;   top: 0;   width: 360px; height: 358px; }
+.panel--japan  { left: 0;   top: 362px; width: 360px; height: 358px; }
+.panel--hakone { left: 364px; top: 0; width: 916px; height: 584px; }
+
+.panel svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The amber frame is drawn over the map, not as a border, so the svg can use
+   the whole panel and its coordinates match the panel exactly. */
+.panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--amber);
+  pointer-events: none;
+}
+
+/* Region name, bottom left, on black so it stays readable over the map */
+.panel__tag {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  margin: 0;
+  padding: 4px 12px 4px 10px;
+  background: var(--bg);
+  border-top: 2px solid var(--amber);
+  border-right: 2px solid var(--amber);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: var(--amber);
+}
+.panel__tag [lang="ja"] {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.panel__sep { color: var(--amber-dim); }
+
+
+/* ---------- 4. MAP LAYERS ----------
+   Classes written by script.js. The glow is a drop-shadow on a whole group,
+   which is far cheaper than one on every line. */
+.glow { filter: drop-shadow(0 0 2.5px rgba(255, 163, 26, 0.65)); }
+.glow--cyan { filter: drop-shadow(0 0 2.5px rgba(34, 211, 204, 0.6)); }
+
+.sea { fill: url(#hatch); }
+.land {
+  fill: var(--bg);
+  stroke: var(--amber);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  fill-rule: evenodd;
+}
+
+.grid line { stroke: var(--amber-dim); stroke-width: 1; }
+.grid text {
+  fill: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+
+.road  { fill: none; stroke: var(--amber); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1; }
+.road--major { stroke-width: 1.9; }
+.rail  { fill: none; stroke: var(--amber); stroke-width: 0.9; stroke-dasharray: 7 4; opacity: 0.75; }
+.river { fill: none; stroke: var(--cyan); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+
+.lake {
+  fill: url(#hatch);
+  stroke: var(--cyan);
+  stroke-width: 1.4;
+  fill-rule: evenodd;
+}
+
+/* The small box that shows where the next map zooms in */
+.marker {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+/* Labels. Japanese name over the English one, as on the reference. */
+.place__ja, .peak__ja {
+  fill: var(--amber);
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+.place__en, .peak__en {
+  fill: var(--amber);
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 2.5px;
+}
+.place--sea .place__ja, .place--sea .place__en { fill: var(--cyan); }
+.peak__tri { fill: var(--amber); }
+
+/* Tokyo-3: drawn by hand, not from data */
+.city path {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.city .city__ground {
+  fill: var(--bg);
+  stroke: var(--bg);
+  stroke-width: 8px;
+  stroke-linejoin: round;
+}
+.city circle { fill: none; stroke: var(--amber); stroke-width: 1.5; }
+.city__en {
+  fill: var(--amber);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+.city__name {
+  fill: var(--ink);
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 15px;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+}
+
+
+/* ---------- 5. BOTTOM STRIP ----------
+   Four boxes, each an outlined body under an inverted tag (amber background,
+   black text), the same color swap as the countdown tag in W-1. */
+.strip {
+  position: absolute;
+  left: 364px;
+  top: 588px;
+  width: 916px;
+  height: 132px;
+  display: grid;
+  grid-template-columns: 220px 220px 190px 1fr;
+  gap: 4px;
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cell__tag {
+  margin: 0;
+  padding: 3px 10px;
+  background: var(--amber);
+  color: var(--bg);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+}
+.cell__tag [lang="ja"] {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  margin-right: 4px;
+}
+.cell__body {
+  flex: 1;
+  margin: 0;
+  padding: 8px 10px;
+  border: 2px solid var(--amber);
+  border-top: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  min-height: 0;
+}
+
+/* Geofront: label and value on one line */
+.rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  align-content: space-between;
+  list-style: none;
+}
+.rows dt { color: var(--amber); }
+.rows dd { margin: 0; text-align: right; }
+
+/* Tokyo-3: bars on the left, the readout on the right */
+.city {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+.bars { width: 100%; height: 100%; }
+.bars .up   { fill: var(--ok); }
+.bars .down { fill: var(--alert); }
+.city__read { text-align: right; }
+.city__label { margin: 0; font-size: 10px; color: var(--amber); }
+.city__num   { margin: 2px 0 0; font-size: 24px; line-height: 1; letter-spacing: 0.06em; }
+.city__safe {
+  margin: 6px 0 0;
+  padding: 1px 6px;
+  border: 1px solid var(--ok);
+  color: var(--ok);
+  font-size: 11px;
+}
+.city__safe [lang="ja"] { font-family: var(--font-jp); font-weight: 800; font-size: 13px; }
+
+/* EVA status: a colored word per unit. The data-status attribute is what a
+   later phase will change. */
+.units {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.units li { display: flex; justify-content: space-between; }
+.units b { font-weight: 400; }
+.units [data-status="repair"]  b { color: var(--alert); }
+.units [data-status="standby"] b { color: var(--ok); }
+
+/* Key: a small swatch drawn in CSS beside each word */
+.legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
+  gap: 2px 8px;
+  font-size: 11px;
+}
+.legend p { margin: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.key { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--amber); }
+.key--rail  { border-top-style: dashed; border-top-width: 1px; }
+.key--river { border-top-color: var(--cyan); }
+.key--water { height: 8px; border: 1px solid var(--cyan); background: repeating-linear-gradient(45deg, var(--cyan) 0 1px, transparent 1px 4px); }
+.key--box   { height: 8px; border: 1.5px solid var(--ink); }
+.legend .legend__credit {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  white-space: normal;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--amber);
+  line-height: 1.3;
+}
+
+
+/* ---------- 6. FIT TO THE WINDOW ----------
+   script.js sets --scale on the root to the largest value that fits the
+   1280x720 stage in the window, and .screen applies it with zoom. Zoom, unlike
+   transform, changes the layout size too, so the centering in section 2 keeps
+   working and nothing is left over to scroll. Without the script the stage
+   stays at full size, centered, and scrolls.
+
+   Phones in portrait would shrink the stage to about a quarter of its size, too
+   small to read, so below 600px wide a rotate prompt covers it instead. The
+   page cannot lock the orientation itself, so it asks. */
+.rotate {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  .screen {
+    visibility: hidden;
+  }
+  .rotate {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--amber);
+    text-align: center;
+  }
+  .rotate__icon {
+    width: 56px;
+    height: 88px;
+    box-sizing: border-box;
+    border: 3px solid var(--amber);
+    border-radius: 8px;
+    transform: rotate(90deg);
+    margin-bottom: 28px;
+  }
+  .rotate__jp {
+    font-family: var(--font-jp);
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  .rotate__en {
+    font-family: var(--font-label);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    padding-left: 0.2em;   /* offsets the trailing letter space so it stays centered */
+  }
+}

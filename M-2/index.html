@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+  <title>NGE Tactical Map Study</title>
+
+  <!-- Fonts: if these fail to load, the text falls back to generic faces -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=Share+Tech+Mono&family=Shippori+Mincho+B1:wght@800&display=swap">
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Map data baked by tools/geo.mjs. Plain scripts rather than JSON, so the page
+       still opens straight from disk. They must load before script.js. -->
+  <script src="data/japan.js" defer></script>
+  <script src="data/kanto.js" defer></script>
+  <script src="data/hakone.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+
+  <!-- The diagonal hatching used for the sea and lakes. Defined once here and
+       referenced by every map, which is why it is outside them. -->
+  <svg class="defs" width="0" height="0" aria-hidden="true">
+    <defs>
+      <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <path d="M0 0V7" />
+      </pattern>
+    </defs>
+  </svg>
+
+  <!-- The screen: a fixed 1280x720 box (scaled to fit the window by script.js).
+       script.js draws the three maps into the empty <svg> elements from the
+       baked data. Without it the panels stay black. -->
+  <main class="screen">
+
+    <!-- Three maps of nested regions: each marks, with a small box, where the
+         next one zooms in. Each svg's viewBox is the panel size, which script.js
+         reads to work out the scale. -->
+    <section class="panel panel--kanto" data-region="kanto" role="img" aria-label="Map of the Kanto region">
+      <svg viewBox="0 0 360 358" aria-hidden="true"></svg>
+      <p class="panel__tag"><span lang="ja">関東</span> KANTO</p>
+    </section>
+
+    <section class="panel panel--japan" data-region="japan" role="img" aria-label="Map of Japan">
+      <svg viewBox="0 0 360 358" aria-hidden="true"></svg>
+      <p class="panel__tag"><span lang="ja">日本</span> JAPAN</p>
+    </section>
+
+    <section class="panel panel--hakone" data-region="hakone" role="img" aria-label="Map of the Hakone region with the city of Tokyo-3">
+      <svg viewBox="0 0 916 584" aria-hidden="true"></svg>
+      <p class="panel__tag"><span lang="ja">箱根</span> HAKONE <span class="panel__sep">/</span> <span lang="ja">第参新東京市</span> TOKYO-3</p>
+    </section>
+
+    <!-- Bottom strip: four boxes, each a tag over a body -->
+    <footer class="strip">
+
+      <section class="cell cell--geofront">
+        <h2 class="cell__tag"><span lang="ja">ジオフロント</span> GEOFRONT</h2>
+        <dl class="cell__body rows">
+          <dt>SURFACE</dt>        <dd>GL ±0</dd>
+          <dt>MAIN SHAFT</dt>     <dd>GL -1400M</dd>
+          <dt>CENTRAL DOGMA</dt>  <dd>GL -1500M</dd>
+          <dt>NERV HQ</dt>        <dd>ONLINE</dd>
+        </dl>
+      </section>
+
+      <section class="cell cell--city">
+        <h2 class="cell__tag"><span lang="ja">第参新東京市</span> TOKYO-3</h2>
+        <div class="cell__body city">
+          <svg class="bars" id="bars" viewBox="0 0 120 56" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="city__read">
+            <p class="city__label">POPULATION</p>
+            <p class="city__num">891285</p>
+            <p class="city__safe"><span lang="ja">安全</span> SAFE</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="cell cell--eva">
+        <h2 class="cell__tag"><span lang="ja">EVA状態</span> EVA STATUS</h2>
+        <ul class="cell__body units">
+          <li data-status="repair"><span>EVA-00</span> <b>REPAIR</b></li>
+          <li data-status="repair"><span>EVA-01</span> <b>REPAIR</b></li>
+          <li data-status="standby"><span>EVA-02</span> <b>STANDBY</b></li>
+        </ul>
+      </section>
+
+      <section class="cell cell--legend">
+        <h2 class="cell__tag"><span lang="ja">凡例</span> KEY</h2>
+        <div class="cell__body legend">
+          <p><i class="key key--road"></i>ROAD</p>
+          <p><i class="key key--rail"></i>RAIL</p>
+          <p><i class="key key--river"></i>RIVER</p>
+          <p><i class="key key--water"></i>SEA / LAKE</p>
+          <p><i class="key key--box"></i>NEXT VIEW</p>
+          <p class="legend__credit">MAP DATA &copy; OPENSTREETMAP CONTRIBUTORS, NATURAL EARTH</p>
+        </div>
+      </section>
+
+    </footer>
+
+  </main>
+
+  <!-- Phone in portrait only: covers the screen and asks for landscape (style.css section 6) -->
+  <div class="rotate">
+    <div class="rotate__icon" aria-hidden="true"></div>
+    <div class="rotate__jp" lang="ja">画面を横向きにしてください</div>
+    <div class="rotate__en">ROTATE TO LANDSCAPE</div>
+  </div>
+
+</body>
+</html>
