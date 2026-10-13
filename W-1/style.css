@@ -1,7 +1,8 @@
 /* =========================================================
    NGE WARNING SCREEN STUDY
-   Pure CSS. No JavaScript.
-   Read top to bottom: variables, layout, type, graphics, motion.
+   CSS draws everything and runs the blinks. script.js only runs the countdown,
+   changes the status words and scales the screen to the window.
+   Read top to bottom: variables, layout, type, graphics, motion, fit.
    ========================================================= */
 
 
@@ -10,6 +11,7 @@
    Try #ff8a00 (orange) or #e8e8e8 (white) to compare palettes. */
 :root {
   --accent: #ff3b1f;
+  --accent-dim: #8f2a17;  /* second, darker red for decoration: rulers, inner rule, margin labels */
   --ink: #f1eee6;        /* off-white used for text */
   --bg: #000000;
 
@@ -20,7 +22,19 @@
 
 body {
   margin: 0;
-  background: #0a0a0a;   /* page behind the screen, slightly lighter so the edge is visible */
+  min-height: 100dvh;
+  display: grid;         /* with margin: auto on .screen, centers it both ways */
+  background-color: #0a0a0a;   /* page behind the screen, slightly lighter so the edge is visible */
+
+  /* Registration (fiducial) marks: a grid of small plus signs, as on the
+     reference maps. One 48px SVG tile with a 1px cross at its center, repeated
+     across the page and centered so the grid is symmetric around the screen.
+     The stage is opaque and covers the marks, so they only show in the margin
+     around it. The stroke is #601b11, --accent at about a third strength on
+     the page color. An SVG url cannot read a CSS variable, so the hex is
+     written out here as %23601b11. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M19 24.5h10M24.5 19v10' stroke='%23601b11' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-position: center;
 }
 
 
@@ -35,7 +49,18 @@ body {
   background: var(--bg);
   color: var(--ink);
   overflow: hidden;
-  margin: 0 auto;
+  margin: auto;          /* centers both ways; in a small window it drops to zero and the page scrolls */
+  zoom: var(--scale, 1); /* set by script.js to fit the window, see section 8 */
+}
+
+/* Read aloud, not shown */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 
@@ -58,6 +83,23 @@ body {
 .hazard--top    { top: 0; }
 .hazard--bottom { bottom: 0; }
 
+/* A black patch with a label, set into the stripes. It hides the stripes behind
+   it, so the text stays readable. The patches sit at opposite ends (top left,
+   bottom right) so the two stripes do not mirror each other. */
+.hazard__tag {
+  position: absolute;
+  top: 0;
+  padding: 0 14px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 22px;       /* same as the stripe height, so the patch fills it */
+  letter-spacing: 0.3em;
+  color: var(--accent);
+}
+.hazard--top .hazard__tag    { left: 120px; }
+.hazard--bottom .hazard__tag { right: 120px; }
+
 
 /* ---------- 4. FRAME AND ROW LAYOUT ----------
    The frame is placed with fixed edge offsets.
@@ -72,6 +114,43 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+
+  /* Double rule: a 1px dim line 5px inside the border. The black ring is drawn
+     over the dim one, which leaves only its outer 1px visible. */
+  box-shadow: inset 0 0 0 5px var(--bg), inset 0 0 0 6px var(--accent-dim);
+}
+
+/* Corner brackets: eight 3px strokes (two per corner) drawn as background
+   layers on one pseudo-element that sits 7px outside the border. One shared
+   gradient is a solid color, sized per layer, so no markup is needed. */
+.frame::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  pointer-events: none;
+  --stroke: linear-gradient(var(--accent), var(--accent));
+  background:
+    var(--stroke) 0 0 / 30px 3px no-repeat,
+    var(--stroke) 0 0 / 3px 30px no-repeat,
+    var(--stroke) 100% 0 / 30px 3px no-repeat,
+    var(--stroke) 100% 0 / 3px 30px no-repeat,
+    var(--stroke) 0 100% / 30px 3px no-repeat,
+    var(--stroke) 0 100% / 3px 30px no-repeat,
+    var(--stroke) 100% 100% / 30px 3px no-repeat,
+    var(--stroke) 100% 100% / 3px 30px no-repeat;
+}
+
+/* Ruler ticks: 1px marks every 16px in the gap between the border and the inner
+   rule, along the top and bottom edges, stopping short of the corners. */
+.frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --ticks: repeating-linear-gradient(90deg, var(--accent-dim) 0 1px, transparent 1px 16px);
+  background:
+    var(--ticks) 50% 0 / calc(100% - 120px) 5px no-repeat,
+    var(--ticks) 50% 100% / calc(100% - 120px) 5px no-repeat;
 }
 
 .row-top,
@@ -188,6 +267,21 @@ body {
   fill: var(--ink);
 }
 
+/* Margin labels: tiny vertical text in the 40px strip between the frame and
+   the screen edge. Decorative, in the dim red so they sit behind the content. */
+.side {
+  position: absolute;
+  top: 50%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  white-space: nowrap;
+  color: var(--accent-dim);
+  writing-mode: vertical-rl;     /* reads top to bottom, Latin text turned sideways */
+}
+.side--right { right: 14px; transform: translateY(-50%); }
+.side--left  { left: 14px;  transform: translateY(-50%) rotate(180deg); }   /* turned so it reads bottom to top */
+
 /* Countdown box: an outlined container with an INVERTED tag
    (colored background, black text). The color swap is a typical NGE move. */
 .countdown {
@@ -237,6 +331,16 @@ body {
 }
 .blink { animation: blink 1s steps(1) infinite; }
 
+/* Status words. The lock blinks slowly the whole time. A word that is still
+   changing (ARMING, CLOSING) blinks twice as fast until it settles. script.js
+   sets data-pending on it, so the blink is CSS and the script only flags it. */
+.val--lock         { animation: blink 1s steps(1) infinite; }
+.val[data-pending] { animation: blink 0.5s steps(1) infinite; }
+
+/* Sealed: the countdown has stopped at zero and the readout blinks until the
+   screen starts over */
+.screen[data-state="sealed"] .countdown__time { animation: blink 1s steps(1) infinite; }
+
 /* FLICKER: stays at full opacity for most of the cycle, with brief dips.
    Subtle is the point. More dips quickly look cheap. */
 @keyframes flicker {
@@ -270,5 +374,62 @@ body {
 
 /* Good habit: respect users who turn off motion in their system settings */
 @media (prefers-reduced-motion: reduce) {
-  .blink, .flicker, .sweep { animation: none; }
+  .blink, .flicker, .sweep, .val--lock, .val[data-pending],
+  .screen[data-state="sealed"] .countdown__time { animation: none; }
+}
+
+
+/* ---------- 8. FIT TO THE WINDOW ----------
+   script.js sets --scale on the root to the largest value that fits the
+   1280x720 stage in the window, and .screen applies it with zoom. Zoom, unlike
+   transform, changes the layout size too, so the centering in section 2 keeps
+   working and nothing is left over to scroll. Without the script the stage
+   stays at full size, centered, and scrolls.
+
+   Phones in portrait would shrink the stage to about a quarter of its size, too
+   small to read, so below 600px wide a rotate prompt covers it instead. The
+   page cannot lock the orientation itself (that needs fullscreen and is
+   unsupported on iOS), so it asks. */
+.rotate {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  .screen {
+    visibility: hidden;
+  }
+  .rotate {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--accent);
+    text-align: center;
+  }
+  .rotate__icon {
+    width: 56px;
+    height: 88px;
+    box-sizing: border-box;
+    border: 3px solid var(--accent);
+    border-radius: 8px;
+    transform: rotate(90deg);
+    margin-bottom: 28px;
+  }
+  .rotate__jp {
+    font-family: var(--font-jp);
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  .rotate__en {
+    font-family: var(--font-label);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    padding-left: 0.2em;   /* offsets the trailing letter space so it stays centered */
+  }
 }

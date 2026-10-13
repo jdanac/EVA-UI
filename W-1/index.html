@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
   <title>NGE Warning Screen Study</title>
 
   <!-- Fonts: if these fail to load, the fallbacks will break the compressed look -->
@@ -10,15 +10,19 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=Share+Tech+Mono&family=Shippori+Mincho+B1:wght@800&display=swap">
 
   <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
 </head>
 <body>
 
-  <!-- The screen: a fixed 1280x720 box. Everything inside is positioned relative to it. -->
+  <!-- The screen: a fixed 1280x720 box (scaled to fit the window by script.js).
+       Everything inside is positioned relative to it. script.js sets data-state
+       here (counting or sealed); the markup below is what shows if it never runs. -->
   <main class="screen flicker">
 
     <!-- Hazard stripes along the top and bottom edges -->
-    <div class="hazard hazard--top"></div>
-    <div class="hazard hazard--bottom"></div>
+    <!-- Each carries a small black label patch (decorative, repeats what the frame says) -->
+    <div class="hazard hazard--top"><span class="hazard__tag" aria-hidden="true">EMERGENCY // A-1</span></div>
+    <div class="hazard hazard--bottom"><span class="hazard__tag" aria-hidden="true">NO ENTRY // SECTOR 03</span></div>
 
     <!-- Outer frame. A flex column pushes its three rows to top, middle, bottom. -->
     <div class="frame">
@@ -56,26 +60,40 @@
       <!-- ROW 3: status lines (left) and countdown (right) -->
       <footer class="row-bottom">
         <div class="mono-small mono-small--status">
-          <div>LOCK STATUS .... ENGAGED</div>
-          <div>OUTER SHUTTER .. OPEN</div>
-          <div>AUTO RESPONSE .. STANDBY</div>
+          <div>LOCK STATUS .... <span class="val val--lock">ENGAGED</span></div>
+          <div>OUTER SHUTTER .. <span class="val" id="shutter">OPEN</span></div>
+          <div>AUTO RESPONSE .. <span class="val" id="response">STANDBY</span></div>
         </div>
 
         <div class="countdown">
           <div class="countdown__tag">
             <div class="countdown__tag-jp" lang="ja">隔壁閉鎖</div>
-            <div class="countdown__tag-en">SEAL IN</div>
+            <div class="countdown__tag-en" id="seal-en">SEAL IN</div>
           </div>
-          <div class="countdown__time">00:00:30</div>
+          <div class="countdown__time" id="time" role="timer" aria-label="Seal countdown">00:30:00</div>
         </div>
       </footer>
 
     </div>
 
+    <!-- Small vertical labels in the margin beside the frame (decorative) -->
+    <div class="side side--left" aria-hidden="true">FILE 473 // EX_MODE OFF</div>
+    <div class="side side--right" aria-hidden="true">MAGI.SYS // Q:331 // LAPD</div>
+
     <!-- Scanline: a faint translucent band that slides down the screen -->
     <div class="sweep"></div>
 
+    <!-- Read aloud, not shown. Announces each status change (the timer itself stays quiet). -->
+    <p class="sr-only" id="status" role="status"></p>
+
   </main>
+
+  <!-- Phone in portrait only: covers the screen and asks for landscape (style.css section 8) -->
+  <div class="rotate">
+    <div class="rotate__icon" aria-hidden="true"></div>
+    <div class="rotate__jp" lang="ja">画面を横向きにしてください</div>
+    <div class="rotate__en">ROTATE TO LANDSCAPE</div>
+  </div>
 
 </body>
 </html>
