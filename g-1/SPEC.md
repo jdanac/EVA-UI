@@ -158,7 +158,8 @@ Draft roles, to refine:
 next.
 
 - One shared pool the three batteries draw from, with a slow resupply, instead
-  of a magazine each. Batteries still have a cooldown and a reload.
+  of a magazine each. Batteries keep their cooldown between shots; the
+  per-battery magazine and reload go.
 - A tighter hit chance at long range, so firing early is wasteful but firing
   late costs the city.
 
@@ -174,6 +175,76 @@ yet. After it, a bot that plays well must beat a bot that just gives all the
 batteries the soonest contact, by a clear margin (see "How to tell a mechanic is
 working"). Only then do waves in the game (C4) and the rest go on, and the
 arena's schedule becomes the first draft of the wave table.
+
+### Milestone A in detail
+
+The rules the build follows. Numbers are placeholders, to be tuned in the arena.
+
+**Battery geometry.** The batteries stay where they are (4 to 5 km from the
+city, 12 km range). Measured: the first battery reaches a contact 14 to 17 km
+out, depending on bearing, and inside about 7 km all three cover it. So the
+decision in milestone A is how many batteries go on which contact, more than
+which battery. If the arena shows no gap, the geometry is revisited (outer
+sites, firing arcs or different ranges).
+
+**C1 fire orders.**
+- Each battery is HOLD or ASSIGNED to one contact. Several batteries may be
+  assigned to the same contact (focus fire).
+- An assigned battery fires whenever its cooldown allows, its target is in
+  range, and the pool has a round, at whatever the hit chance is. Timing is the
+  player's decision: assign later to waste fewer rounds.
+- Any new assignment, including one from HOLD, starts a retarget delay (2.5 s)
+  before the first shot. Staying on the same target costs nothing.
+- When the target is destroyed or reaches its objective, the battery drops to
+  HOLD. It never picks a new target by itself: that would be spam again.
+- `engage()` goes; the sim gains `assign(battery, contactId)` and
+  `hold(battery)`.
+
+**C3 ammunition.** A shared pool of 30 rounds, with 1 round back every 6 s, up
+to 30. No magazine or reload per battery; the 1.5 s cooldown stays. The hit
+chance falls more steeply at long range (draft: 85% at 4 km or closer to 20% at
+12 km).
+
+**C2 threat types for the milestone.** SCOUT is dropped for now; three kinds:
+- STANDARD and HEAVY as today, flying at the city.
+- RAIDER: 1.4 km/s, hull 50, flies at one battery (chosen from the spawn
+  stream) instead of the city. When it reaches it (within 0.5 km) the battery is
+  SILENCED for 20 s: it cannot fire, and it loses its assignment. A raider does
+  no population damage.
+- A contact's ETA is measured to its own objective, so the contact list sorts a
+  raider by when it reaches its battery.
+
+**Minimal C5 Geofront integrity.** Starts at 100. A surface impact costs
+STANDARD 15 and HEAVY 40 (SCOUT 5 if it returns). At 0 the Geofront is
+breached and the run ends.
+
+**Pause.** Space pauses and resumes the game, and orders can be given while
+paused (the owner's choice, see open decision 1). "Certainty costs time" now
+means game time: pausing to think is allowed, but the contact still closes
+while you wait in game time.
+
+**The arena.**
+- A seed fixes everything: the schedule of kinds and times is written in the
+  arena script, and the seed varies the bearings, the raiders' targets and the
+  hit rolls.
+- Bots decide once a game second, not every step, so a gap measures judgment,
+  not reaction speed.
+- Bots see only what the screen shows: positions, kinds, hulls, ETAs, battery
+  states and the pool. They never see a round's pre-rolled hit (and later never
+  a hidden type).
+- A breached run scores the population at the moment of breach; the breach rate
+  is reported separately.
+- First run it on today's mechanics, where SPAM and the others should be about
+  equal. That proves the harness before anything is tuned.
+- Tuning against a hand-written PRIORITY bot can fit the game to that bot; the
+  human test is the guard.
+
+**The screen for the milestone.** The selected-contact panel gets an assign
+button per battery (keys 1 to 3) and HOLD (H holds all). The battery box shows
+each battery's target and its retarget or silenced timer. The pool and the
+Geofront integrity get readouts. ENGAGE and Space/E go; Space is pause, with a
+PAUSED state on the screen. The `sim.test.mjs` checks that use `engage()` are
+rewritten.
 
 ### C4. Waves, win and lose
 
@@ -302,11 +373,11 @@ runs and answer:
 
 ## Open decisions for the owner
 
-These are theirs, with a default if they have no view.
+These are theirs, with a default if they have no view. Battery geometry was
+also asked: keep the positions and revisit after the arena.
 
-1. **Pause.** Real time with no pause (default: it keeps the tension, and each
-   contact takes about 45 seconds), or an order-planning pause as in some
-   command games.
+1. **Pause.** Decided: an order-planning pause. Space pauses, and orders can be
+   given while paused.
 2. **How hard is the Geofront line?** Default: a hard fail on a breach.
 3. **Fiction.** The studies use "PATTERN BLUE" for the unknown contact. Default:
    contacts are UNKNOWN until identified, and a threat is then classed PATTERN
