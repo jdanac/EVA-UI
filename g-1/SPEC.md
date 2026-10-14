@@ -1,229 +1,308 @@
-# G-1 spec: radar defense, steps 1 to 3
+# G-1 spec: NERV operations command
 
-Status: steps 1 and 2 built (see the end of this file). Every number here is a
-starting value to tune, not a decision. This covers roadmap steps 1 to 3 only (moving
-contact, engage, pressure). Steps 4 to 7 are listed at the end so they are not
-forgotten and not built early.
+Status: rewritten 2026-10-14 after steps 1 and 2 of the first draft were built
+and judged too thin (see "Why this was rewritten"). The foundation is built;
+every command mechanic below is a draft, to be refined one at a time. Numbers
+are placeholders unless a mechanic says otherwise. The first draft is in the git
+history (commit `20fa832` and earlier).
 
-## The game in one paragraph
+## The concept
 
-Contacts approach Tokyo-3 from the sea. You watch them on the radar, pick which
-one to fire at and when, and spend limited ammo from three batteries. A contact
-that reaches the city costs population. Survive eight waves with at least 40%
-of the population left. Score is the population remaining.
+You are the duty commander in the NERV operations room. Contacts come in from the
+sea toward Tokyo-3. You do not aim anything. You watch the radar, decide what
+each contact is and what matters, give orders to the units under your command,
+and decide when to escalate: from the surface batteries, to an EVA sortie, to
+the last-resort measures that cost the city to save what lies beneath it.
 
-The decision is the whole game: fire early and the shots miss, fire late and
-the city takes the hit. Ammo is short enough that you cannot fire at everything.
+You hold the city, and above all you keep the enemy out of the Geofront. A
+breach of the Geofront ends the run. Losing the surface does not, but it costs
+population, and population is the score.
 
-## Setup and scale
+It is a game of judgment under time pressure. There is no twitch skill, nothing
+to aim, and nothing that rewards pressing one key quickly.
 
-- **Region:** one new baked map, centered on Tokyo-3 (139.04E, 35.233N), about
-  49 km square: west 138.77, south 35.013, east 139.31, north 35.453. Sea to the
-  south and east (Sagami Bay), mountains to the north. Baked with
-  `tools/geo.mjs`, which needs a small option for the output folder (it writes
-  to `t-1/data` today). Budget: under about 500 KB, so keep roads to primary and
-  up and drop minor detail.
-- **Overview:** the existing Kanto data (28 KB) as a small inset, for early
-  warning. It is only a display; contacts exist in the sim before they reach
-  the main map.
-- **Sim units:** kilometers on a flat plane, city at (0, 0), x east, y north.
-  The sim knows nothing about longitude, latitude or pixels. One function
-  converts km to lon/lat for drawing, then the existing projection takes over.
-- **Contact spawn:** 40 km from the city, on a bearing inside the sea sector
-  (100 to 230 degrees clockwise from north). A contact enters the main map at
-  about 24 km. So a normal contact gives roughly 20 s of tracking on the
-  overview and 25 to 30 s of engagement on the main map.
+## Why this was rewritten
 
-## Entities
+The first draft was "radar contact, then press fire". Steps 1 and 2 were built
+and tested, and a stress run showed the flaw: holding Space on the auto-selected
+contact destroyed five contacts at once with no losses. The causes were
+structural, not numbers:
 
-| Thing | Fields | Notes |
-|---|---|---|
-| Contact | id, kind, x, y, hp, state | state: `inbound`, `destroyed`, `impact` |
-| Battery | id, x, y, rounds, cooldown, reload | three, taken from the T-1 `SITES` |
-| City | population | starts at 891,285, same as the T-1 strip |
+- one verb (fire), with the sim choosing the battery too;
+- every contact the same problem (a straight line at the city), so "soonest
+  first" was always right and selection carried no consequence;
+- nothing scarce, nothing uncertain, and nothing competing for attention.
 
-Contact kinds (placeholders):
+More waves and tighter ammo would only have made spam run out of rounds. The
+fix is a different kind of control: orders instead of aim, threats that need
+different answers, and an escalation ladder with real costs.
 
-| Kind | Speed km/s | HP | City damage on impact |
-|---|---|---|---|
-| SCOUT | 1.2 | 50 | 40,000 |
-| STANDARD | 0.8 | 100 | 120,000 |
-| HEAVY | 0.5 | 200 | 300,000 |
+## Design rules
 
-Contacts fly a straight line at the city and impact inside 2 km of it.
+1. **Orders, not aim.** The player directs units; units execute, with delays.
+   Nothing the player does depends on speed of reaction, only on judgment.
+2. **Every decision costs something.** Ammo, time, readiness, or the city. If a
+   choice is free, it is not a choice, and it should be removed.
+3. **Certainty costs time.** Contacts start unidentified. Waiting to know is a
+   decision, and the contact keeps coming while you wait.
+4. **An escalation ladder.** Batteries, then an EVA sortie, then last resort
+   measures. Each rung is stronger and costs more, and none can be used twice
+   in a row.
+5. **Losing is gradual, then sudden.** Surface damage accumulates and shrinks the
+   score. The Geofront is a hard line: one breach is the end.
+6. **Legible at a glance.** All of it fits the fixed 1280x720 screen, and a
+   person can read the situation in a second or two. Orders are one or two
+   clicks (and a key) each.
 
-## Rules
+## The stakes
 
-- **Batteries:** range 12 km, 6 rounds, 1.5 s between shots. At zero rounds a
-  battery reloads for 10 s and cannot fire.
-- **Engage:** one press fires one round at the selected contact from the best
-  available battery (in range, has a round, off cooldown, highest hit chance).
-  No battery available means the press does nothing and the log says why.
-- **Hit chance:** 85% at 4 km or closer, falling in a line to 35% at 12 km. The
-  roll is made when the round is fired, with the sim's seeded random generator.
-- **Shot flight:** 6 km/s, so up to 2 s. Damage is 50 if it hits. If the
-  contact is already destroyed when the round lands, the round is wasted.
-- **Between waves:** 6 s pause, and each battery gets 3 rounds back (cap 6).
-  This is the ammo economy and the number most likely to need tuning.
-- **Lose:** population below 40% of the start. **Win:** wave 8 cleared.
+- **Population** starts at 891,285 and is the score. It falls when a contact
+  reaches the surface (today: 40,000 / 120,000 / 300,000 by type).
+- **Geofront integrity** is the hard fail. Surface impacts push toward it, in
+  proportion to the contact's size (draft: a HEAVY takes a large share, a SCOUT
+  almost none). At zero the run ends, whatever the population.
+- The bulkhead seal (C8) is the way to stop integrity falling, at the price of
+  the surface.
 
-### Waves
+## The command loop
 
-| Wave | Contacts |
-|---|---|
-| 1 | 1 standard |
-| 2 | 2 standard |
-| 3 | 2 standard, 1 scout |
-| 4 | 3 standard, 1 scout |
-| 5 | 1 heavy, 2 scout |
-| 6 | 3 standard, 2 scout |
-| 7 | 2 heavy, 2 standard |
-| 8 | 2 heavy, 3 standard, 2 scout |
+One contact's life, which is also what the screen is built to show:
 
-Contacts in a wave spawn staggered over 10 s so they arrive spread out.
+1. **Detect.** It shows on the wide map as an unidentified contact.
+2. **Track.** It enters the scope and its course and speed are known.
+3. **Identify.** Optional and costly in time: what is it, what does it want?
+4. **Allocate.** Decide which units deal with it, and which contacts get nothing.
+5. **Escalate.** If the batteries cannot handle it, call up something heavier.
+6. **Resolve.** Destroyed, or it reaches the surface. Count the damage.
+7. **Recover.** Between contacts: resupply, repair, re-plan.
 
-## Controls and layout
+Several contacts overlap, so the real game is steps 4 and 5 for the whole
+picture at once.
 
-Placeholder layout, existing palette, no ornament (see the sketch in the
-conversation: one large main map, overview inset, contact list and selected
-panel on the right, thin bar along the bottom). Fixed 1280x720, scaled by the
-same `fit()` as the studies.
+## What is built (the foundation)
 
-- **Contact list:** sorted by time to impact, soonest first, with the ETA in
-  seconds. It is the main way to choose a target.
-- **Selecting:** click a blip, click a list row, or Tab and the arrow keys to
-  step through the list. A new contact is auto-selected only if nothing is.
-- **Engage:** the ENGAGE button, or Space.
-- **Bottom bar:** population, rounds per battery with reload state, wave.
-- **Event log:** a one-line ticker, not the T-1 box.
-- **Radar sweep:** cosmetic in these steps (a rotating line and range rings
-  every 5 km). It does not affect the sim.
+All of this stays; most of it is the stage the commands will play on.
 
-## Code layout
+- **World:** one baked map centered on Tokyo-3 (139.04E, 35.233N), about 49 km
+  square (west 138.77, south 35.013, east 139.31, north 35.453), sea to the
+  south and east, plus the Kanto outline for the wide map. Sim units are
+  kilometers on a flat plane with the city at (0, 0), x east, y north; the sim
+  knows nothing about longitude, latitude or pixels.
+- `sim.js`: the rules with no DOM, fixed step, and a seeded random generator in
+  two separate streams (spawns and hit rolls, so firing never changes where the
+  next contact comes from, and `?seed=N` replays comparably). 23 checks in
+  `sim.test.mjs` (`node g-1/sim.test.mjs`).
+- A circular radar scope (24.5 km, rings every 5 km, a sweep that is Tokyo-3's
+  own radar) over the Sagami Bay coast, a wide-area map, a contact list sorted
+  by time to impact, a selected-contact panel, a battery readout, an event log
+  and a ticker. Tokyo-3 with its Geofront is drawn at the center.
+- Contacts: SCOUT, STANDARD and HEAVY flying a straight line at the city from a
+  bearing in the sea sector (100 to 230 degrees), spawning 40 km out and
+  reaching the scope at 24.5 km.
+- Three batteries (north, south, east) with range, a magazine, cooldown and
+  reload, rounds with flight time and a hit chance that falls with distance
+  (85% close to 35% at the edge of the range), hull damage, destroyed and
+  impact states, and population loss.
+- **Direct fire (ENGAGE, Space or E) is a placeholder.** Mechanic C1 replaces it.
+- **Known gaps:** no OpenStreetMap detail on the scope (Overpass was down on
+  2026-10-14; retry with `node tools/geo.mjs detail sagami-detail 138.77 35.013
+  139.31 35.453 --out g-1/data --roads "motorway|trunk|primary|secondary"
+  --rivers river`, draw it the way T-1's `detail()` does, and credit
+  OpenStreetMap contributors); the homepage does not link to G-1.
 
-New self-contained folder, `g-1/`, copied from `t-1/`:
+## Mechanics, one at a time
 
-- `index.html`, `style.css`, `script.js`: layout, drawing, input.
-- `sim.js`: the rules only. No DOM, no clock of its own. `step(dt)` advances
-  it, `engage(id)` is the player's one action, a snapshot is readable, and it
-  queues events (spawn, shot, hit, miss, impact, wave start) for the UI to log
-  and animate. Fixed timestep of 1/30 s, driven by an accumulator in
-  `script.js`. Seeded random generator, so a run can be replayed.
-- `data/<region>.js`: the new map, plus the Kanto data for the inset.
-- `sim.test.mjs` (only if approved, see below): plain Node, built-ins only.
+Each mechanic is a decision to add, with a rule sketch, what it needs first, and
+how to tell it is working. They are listed in the order to build them. None is
+final: each gets refined here before it is coded.
 
-The same rule as the studies applies: CSS owns the look and JS sets
-attributes (`data-state`, `data-kind`, `data-selected`, `data-status`). Positions
-go on SVG elements as attributes. `data-state` on `.screen` is `idle`, `running`,
-`paused` or `gameover`.
+### C1. Fire orders (replaces direct fire)
 
-## Steps and what proves each one
+*Decision created:* which battery works on which contact, and when to stop.
 
-**Step 1: moving contact.** The new region is baked and drawn. A contact spawns,
-shows on the overview, crosses onto the main map and reaches the city, with the
-list, ETA and radar sweep in place. No firing yet.
-- Done when: a contact crosses the whole path in the expected 45 to 50 s, its
-  position matches on both maps, and a replay with the same seed repeats it
-  exactly.
+- A battery is HOLD (does not fire) or ASSIGNED to one contact. An assigned
+  battery tracks its target, fires whenever it can and the target is in range,
+  and spends ammo while it does. Nothing fires unless ordered to.
+- Giving a battery a new target costs a retarget delay (draft 2.5 s) before it
+  can fire, so reassigning constantly is not free.
+- The player selects a contact and toggles batteries onto it (buttons in the
+  panel, keys 1 to 3). HOLD FIRE is the other order.
+- Ammo comes from a shared pool (C3), so a wasteful assignment hurts later, and
+  the decision to *stop* firing is as real as the decision to fire.
 
-**Step 2: engage.** Batteries, ammo, hit rolls, shot animation, damage,
-destroyed and impact states, population drops on impact.
-- Done when: you can lose by letting one through, win by stopping one, and the
-  numbers in the bottom bar always agree with the log.
+*Needs:* nothing, but on its own it shows nothing, because every contact is
+still the same problem. Build it together with C2 and C3 (milestone A).
 
-**Step 3: pressure.** Waves, resupply, win and lose, game-over screen, restart,
-pause.
-- Done when: eight waves can be played start to finish. The fun test below
-  passes.
+### C2. Threat types that need different answers
 
-### The fun test (end of step 3)
+*Decision created:* which contact matters most, which is not always the soonest.
 
-Play five full runs and answer:
+Draft roles, to refine:
+- **STANDARD:** heads for the city. The reference case.
+- **HEAVY:** slow, a great deal of hull, a large share of Geofront damage. Wants
+  several batteries on it for a long time, which leaves less for the rest.
+- **RAIDER:** fast and fragile, and it goes for a battery rather than the city:
+  a silenced battery stays down for a time. It matters far more than its ETA
+  suggests, and it is easy to ignore until too late.
+- Possibly later: **SNIPER** (stops at range and hits from there), swarms.
+
+*Needs:* C1 (otherwise there is no way to answer differently).
+
+### C3. Ammunition economy
+
+*Decision created:* how much to spend on this contact, and what to keep for the
+next.
+
+- One shared pool the three batteries draw from, with a slow resupply, instead
+  of a magazine each. Batteries still have a cooldown and a reload.
+- A tighter hit chance at long range, so firing early is wasteful but firing
+  late costs the city.
+
+*Needs:* C1.
+
+### Milestone A: the arena check
+
+C1, C2 and C3 together are the first milestone, because none shows a margin
+alone. After them, a bot that plays well must beat a bot that just gives all the
+batteries the soonest contact, by a clear margin (see "How to tell a mechanic is
+working"). Only then do waves and the rest go on.
+
+### C4. Waves, win and lose
+
+Eight to ten escalating contact groups, a short pause between, a win when the
+last is cleared, and the lose conditions from "The stakes". A summary screen.
+
+*Needs:* milestone A. Waves on top of a one-answer game would only be longer.
+
+### C5. Geofront integrity and the breach
+
+The hard fail from "The stakes", with its own readout in the city box and a
+breach state (the W-1 look, red). Probably built together with C4 so a run can
+end.
+
+### C6. Identification
+
+*Decision created:* act now on a guess, or wait to know.
+
+- Contacts show as UNKNOWN. Identification takes time, shown as a bar, and the
+  contact keeps closing. Once identified it shows its type, and a **DECOY** (not
+  a threat, only worth ignoring) becomes possible.
+- Firing at an unknown contact is allowed, at a penalty (more spread), so you
+  can choose to gamble.
+
+*Needs:* C2 (types worth identifying).
+
+### C7. EVA sortie
+
+*Decision created:* when to commit the one thing that can stop a HEAVY, and
+whether to risk the unit.
+
+Three units with a status each (as on the T-1 strip: EVA-00 and 01 in REPAIR,
+EVA-02 on STANDBY). A sortie is a chain of steps, each visible and none instant:
+1. **Request authorization.** The MAGI vote (the M-1 screen). It takes several
+   seconds and can be denied; the odds rise with the threat. A denial means
+   waiting, and resubmitting costs more time.
+2. **Launch.** A delay to reach the surface, during which the contact keeps
+   coming. Too late and it is wasted.
+3. **On the field.** The unit is strong inside a radius, and it runs on its
+   umbilical: a countdown (the C-1 screen) after which it must withdraw or is
+   lost. It takes damage from a HEAVY.
+4. **Recovery.** The unit is in REPAIR for a long time and cannot be used for the
+   next waves.
+
+*Needs:* C2, C4, C5 (something worth deploying against, and stakes).
+
+### C8. Bulkhead seal
+
+*Decision created:* give up the surface to save the Geofront.
+
+- When a breach looks likely, seal the Geofront. It takes about 30 seconds (the
+  W-1 countdown) and cannot be undone this wave. Once sealed, Geofront integrity
+  stops falling, but surface impacts do double population damage: the city is
+  on its own.
+- It is meant to be a hard, late call, and it should sometimes be the right one.
+
+*Needs:* C5.
+
+### C9. Radar fidelity
+
+*Decision created:* how much to trust what you see.
+
+- Contact positions refresh only as the sweep passes (up to 4 s old), so what
+  you see lags and a fast contact is further than it looks.
+- The west radar from T-1 returns as a separate site that can be destroyed, so
+  losing it blinds part of the scope. (Today the scope has no separate radar:
+  the sweep is Tokyo-3's own.)
+
+*Needs:* C2 (a RAIDER that goes for the radar), and a decision about clicking
+on a position that lags.
+
+### C10. Between waves
+
+*Decision created:* how to spend a pause.
+
+Repair or resupply, probably with a small budget that carries over. Optional;
+it could turn a run into a small campaign.
+
+### C11. Presentation
+
+The layout rebuilt around orders: the selected-contact panel becomes an orders
+panel, the bottom bar carries the EVA and seal controls, and the screen gets the
+frame detail and kanji labels of the studies, a title and ending screens, maybe
+sound, a back link and a homepage card. The circular scope, the contact list,
+the log and the styling already built stay.
+
+Command words for the kanji labels: 交戦 ENGAGE, 待機 HOLD, 出撃 SORTIE, 承認
+AUTHORIZED, 否決 DENIED, 隔壁閉鎖 BULKHEAD SEAL, 識別 IDENTIFY.
+
+## How to tell a mechanic is working
+
+### The arena (a bot test)
+
+`sim.js` has no DOM, so strategies can be tested without a browser. Plan a
+script, `g-1/arena.mjs` (Node built-ins only, like the test file), that plays
+the same seeds with different bots and reports population left, breach rate and
+win rate:
+
+- **SPAM:** gives every available battery the soonest contact, always. The
+  baseline, and the thing the first draft lost to.
+- **RANDOM:** assigns at random. A floor.
+- **PRIORITY:** a heuristic that uses what the mechanics offer: raiders first,
+  focus fire on heavies, hold fire on low hit chances, call the sortie at the
+  right moment.
+
+A mechanic earns its place if it widens the gap between PRIORITY and SPAM. A
+first target: over 300 seeds, PRIORITY keeps at least 30% more population than
+SPAM, and SPAM loses before the last wave. If a mechanic does not move the
+numbers, it is cut or reworked, not kept for being clever.
+
+This measures decision depth, not fun. It catches "nothing to decide" early and
+cheaply; it cannot say whether the decisions are interesting.
+
+### The human test
+
+After milestone A, and again after waves and after the EVA sortie, play five full
+runs and answer:
 1. Did you ever have to choose between two contacts, and was it hard?
-2. Did you ever run out of ammo and feel it was your own fault?
-3. Can spamming ENGAGE at the nearest contact win? If yes, the design fails.
-4. Is wave 1 clear without reading anything?
+2. Did you ever regret an assignment, and was it your own fault?
+3. Could one habit (the same order every time) win? If yes, the design fails.
+4. Could someone new read the situation without being told?
 
-If 1 or 2 is no, or 3 is yes, change the rules (numbers first, then
-mechanics) before building anything from the list below.
+## Open decisions for the owner
 
-## Not in these steps
+These are theirs, with a default if they have no view.
 
-Radar identification and decoys (the sweep starts affecting what you see), the
-EVA sortie with the C-1 countdown and REPAIR cooldown, the M-1 authorization
-vote, the W-1 failure screen, sound, a tutorial, kanji and frame detail on the
-new layout, touch input, high score saved in the browser, more regions.
+1. **Pause.** Real time with no pause (default: it keeps the tension, and each
+   contact takes about 45 seconds), or an order-planning pause as in some
+   command games.
+2. **How hard is the Geofront line?** Default: a hard fail on a breach.
+3. **Fiction.** The studies use "PATTERN BLUE" for the unknown contact. Default:
+   contacts are UNKNOWN until identified, and a threat is then classed PATTERN
+   BLUE, with no further lore.
+4. **Scale.** Default: one run of eight to ten waves, played in a sitting.
+   Between-wave repair (C10) is the first step toward anything longer.
 
-## Open items to confirm before step 1
+## Not in scope
 
-- DECIDED: a small Node test file for `sim.js`, run with
-  `node g-1/sim.test.mjs`. One file, built-ins only (`node:assert`), no
-  package.json, same standing as `tools/geo.mjs`. Dev-time only; the page never
-  loads it. This is the one exception to the repo's "no tests" rule.
-- Approve the `geo.mjs` output-folder option.
-- Add a "game" section to `CLAUDE.md` and a game card on the homepage (the
-  homepage says "studies").
-
-## Step 1 as built, and where it differs from the draft
-
-Built: `sim.js` (spawn, straight-line flight, scope and impact events, seeded
-random, 10 checks in `sim.test.mjs`), the screen, and the new region.
-
-- **The scope is a circle, not a square map.** The sim says a contact is on the
-  scope at 24.5 km, so the map is clipped to a circle of that radius and the
-  contact appears at the same distance in every direction. The layout is
-  therefore three columns (wide map and scope facts, scope, contacts and
-  selected contact) instead of the sketch with a large map and a side column.
-- **Sim and map share one flat conversion** (km to lon/lat around the city), not
-  Web Mercator, so they cannot disagree. At 50 km the difference is invisible.
-- **Land only.** Two files are baked: `sagami-land` (Natural Earth, 6.6 KB, the
-  main scope) and a copy of the Kanto outline for the wide map. The OpenStreetMap
-  detail bake (roads, rivers, water, peaks) failed with Overpass 504 errors on
-  2026-10-14, even for a tiny query, so the scope shows coast, sea and the
-  sites but no roads. Retry with:
-  `node tools/geo.mjs detail sagami-detail 138.77 35.013 139.31 35.453 --out g-1/data --roads "motorway|trunk|primary|secondary" --rivers river`
-  Then draw it in `drawMaps` (the `detail()` function in T-1 is the model) and
-  credit OpenStreetMap contributors in the SCOPE box.
-- **Bottom bar** has test controls (type, DETECT, RESET) in place of nothing,
-  plus the ticker and the population (still static: it changes in step 2).
-- **ENGAGE** is on screen, disabled.
-- `?seed=N` in the URL replays a run; RESET without it picks a new seed.
-- The homepage card is not added yet, so the game is not linked from the
-  dashboard until it is worth showing.
-
-## Step 2 as built
-
-Built: three batteries with rounds, cooldown and reload; a round with a flight
-time, a hit roll made when it is fired, and damage when it lands; destroyed and
-impact states; population that drops on impact; the ENGAGE button and Space or
-E; a battery readout, an event log and a live population. 23 checks in
-`sim.test.mjs`. Spawns and hit rolls use separate random streams, so firing
-  never changes where the next contact appears and `?seed=N` replays comparably.
-
-- **Rules as written in this spec**, with these choices where it was silent: the
-  nearest ready battery fires; a refused press (no target, out of range, all
-  batteries cycling) is an event, so the log says why; a round whose target is
-  already destroyed or has hit the city is "wasted"; the hit roll uses the
-  distance at the moment of firing, and the contact is not led.
-- **Batteries are in `sim.js`** (km from the city, converted once from T-1's
-  north, south and east batteries), since the rules need them.
-- **The west radar is gone from the scope.** The sweep is Tokyo-3's own radar,
-  at the center. Idea for step 4: make a separate radar site a vulnerable
-  asset, so losing it makes the scope go blind.
-- **Layout:** the left box is now BATTERIES plus a seven-line EVENT LOG (the
-  SCOPE facts moved to the corners of the scope: range and rings top left,
-  clock and seed top right). The selected panel gained HULL, HIT (the chance of
-  the shot that would be fired right now) and BATTERY (which one, or CYCLING).
-  The ticker stays as the latest event in its level's color.
-- **A destroyed contact** turns teal and stays for 2.5 s, as an impact does.
-
-### First read on the balance (placeholder numbers, to be tuned in step 3)
-
-A stress run held Space on the selected contact against five contacts at once
-(standard, scout, heavy, standard, scout, about 500 hull in all). All five were
-destroyed and no population was lost, with 5 of 18 rounds left. So the guard
-rail in the fun test below, "spamming ENGAGE wins", is already close to failing
-before waves, resupply and decoys exist. Likely levers, in order: fewer rounds
-per magazine or a longer reload, a lower hit chance at long range, tighter
-spacing of the wave so ammo runs out, then hull values. Tune with a script
-against `sim.js` before judging by feel.
+Touch input, accounts or online scores, a map editor, and the T-1 study itself,
+which stays as it is.

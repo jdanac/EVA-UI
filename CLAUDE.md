@@ -12,7 +12,7 @@ The repo root holds the published homepage, `index.html` and `style.css`, with n
 
 ## G-1: the game
 
-`g-1/` is a playable prototype built on the T-1 look, not a study, so the "one `index.html`, `style.css`, `script.js`" rule does not hold. `g-1/SPEC.md` is the plan and the place to look first: the rules, the numbers, the roadmap steps and what is built. The rules live in `sim.js` (no DOM, fixed timestep, seeded random, kilometers around the city); `script.js` only reads it and draws. Run `node g-1/sim.test.mjs` after changing `sim.js` (Node built-ins only, no package.json; the one exception to "no tests", approved). The page still opens straight from disk.
+`g-1/` is a playable prototype built on the T-1 look, not a study, so the "one `index.html`, `style.css`, `script.js`" rule does not hold. `g-1/SPEC.md` is the plan and the place to look first: the concept (a military command game: orders, not aim), what is built, and the mechanics backlog (C1 onward), which are refined one at a time and checked with bot strategies before they are kept. The rules live in `sim.js` (no DOM, fixed timestep, seeded random, kilometers around the city); `script.js` only reads it and draws. Run `node g-1/sim.test.mjs` after changing `sim.js` (Node built-ins only, no package.json; the one exception to "no tests", approved). The page still opens straight from disk.
 
 ## Running a study
 
