@@ -46,8 +46,8 @@ different answers, and an escalation ladder with real costs.
 3. **Certainty costs time.** Contacts start unidentified. Waiting to know is a
    decision, and the contact keeps coming while you wait.
 4. **An escalation ladder.** Batteries, then an EVA sortie, then last resort
-   measures. Each rung is stronger and costs more, and none can be used twice
-   in a row.
+   measures. Each rung is stronger and costs more. The sortie and the seal, the
+   two heavy rungs, cannot be used twice in a row.
 5. **Losing is gradual, then sudden.** Surface damage accumulates and shrinks the
    score. The Geofront is a hard line: one breach is the end.
 6. **Legible at a glance.** All of it fits the fixed 1280x720 screen, and a
@@ -63,6 +63,10 @@ different answers, and an escalation ladder with real costs.
   almost none). At zero the run ends, whatever the population.
 - The bulkhead seal (C8) is the way to stop integrity falling, at the price of
   the surface.
+- In this draft the same surface impacts cost population and Geofront integrity,
+  so "defend the city" and "keep the Geofront safe" are one decision until the
+  seal exists. Whether the breach should be a more distinct decision is open
+  (see the open decisions).
 
 ## The command loop
 
@@ -162,23 +166,30 @@ next.
 
 ### Milestone A: the arena check
 
-C1, C2 and C3 together are the first milestone, because none shows a margin
-alone. After them, a bot that plays well must beat a bot that just gives all the
+C1, C2 and C3, with the minimal C5 (Geofront integrity and the breach) and the
+arena (below), are the first milestone, because none of them shows a margin
+alone. The arena plays a fixed, scripted contact schedule for each seed (timed
+spawns that escalate, held in the arena script), so real waves are not needed
+yet. After it, a bot that plays well must beat a bot that just gives all the
 batteries the soonest contact, by a clear margin (see "How to tell a mechanic is
-working"). Only then do waves and the rest go on.
+working"). Only then do waves in the game (C4) and the rest go on, and the
+arena's schedule becomes the first draft of the wave table.
 
 ### C4. Waves, win and lose
 
-Eight to ten escalating contact groups, a short pause between, a win when the
-last is cleared, and the lose conditions from "The stakes". A summary screen.
+Eight to ten escalating contact groups in the game itself (turning the arena's
+scripted schedule into a wave table), a short pause between, a win when the last
+is cleared, and the lose conditions from "The stakes". A summary screen.
 
 *Needs:* milestone A. Waves on top of a one-answer game would only be longer.
 
 ### C5. Geofront integrity and the breach
 
 The hard fail from "The stakes", with its own readout in the city box and a
-breach state (the W-1 look, red). Probably built together with C4 so a run can
-end.
+breach state (the W-1 look, red). A minimal version (an integrity meter that
+surface impacts reduce, and a breach that ends the run) is part of milestone A,
+because the arena needs a way for a run to be lost. The dramatic breach state
+and the full screen come later, with C4.
 
 ### C6. Identification
 
@@ -253,7 +264,7 @@ sound, a back link and a homepage card. The circular scope, the contact list,
 the log and the styling already built stay.
 
 Command words for the kanji labels: 交戦 ENGAGE, 待機 HOLD, 出撃 SORTIE, 承認
-AUTHORIZED, 否決 DENIED, 隔壁閉鎖 BULKHEAD SEAL, 識別 IDENTIFY.
+AUTHORIZED, 否定 DENIED, 隔壁閉鎖 BULKHEAD SEAL, 識別 IDENTIFY.
 
 ## How to tell a mechanic is working
 
@@ -261,8 +272,8 @@ AUTHORIZED, 否決 DENIED, 隔壁閉鎖 BULKHEAD SEAL, 識別 IDENTIFY.
 
 `sim.js` has no DOM, so strategies can be tested without a browser. Plan a
 script, `g-1/arena.mjs` (Node built-ins only, like the test file), that plays
-the same seeds with different bots and reports population left, breach rate and
-win rate:
+the same seeds, each with a fixed scripted contact schedule, with different bots
+and reports population left, breach rate and survival to the end of the schedule:
 
 - **SPAM:** gives every available battery the soonest contact, always. The
   baseline, and the thing the first draft lost to.
@@ -273,7 +284,8 @@ win rate:
 
 A mechanic earns its place if it widens the gap between PRIORITY and SPAM. A
 first target: over 300 seeds, PRIORITY keeps at least 30% more population than
-SPAM, and SPAM loses before the last wave. If a mechanic does not move the
+SPAM, and SPAM is breached before the end of the schedule far more often than
+PRIORITY is. If a mechanic does not move the
 numbers, it is cut or reworked, not kept for being clever.
 
 This measures decision depth, not fun. It catches "nothing to decide" early and
@@ -301,6 +313,11 @@ These are theirs, with a default if they have no view.
    BLUE, with no further lore.
 4. **Scale.** Default: one run of eight to ten waves, played in a sitting.
    Between-wave repair (C10) is the first step toward anything longer.
+5. **Should the breach be its own decision?** As drafted, the Geofront falls with
+   the surface, so it only becomes a separate call once the seal exists. One way
+   to separate them earlier: a short window after a surface impact in which a
+   sortie or the seal can still save the Geofront. Default: leave it as
+   drafted and revisit after milestone A.
 
 ## Not in scope
 
