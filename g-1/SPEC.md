@@ -196,8 +196,9 @@ random, 10 checks in `sim.test.mjs`), the screen, and the new region.
 Built: three batteries with rounds, cooldown and reload; a round with a flight
 time, a hit roll made when it is fired, and damage when it lands; destroyed and
 impact states; population that drops on impact; the ENGAGE button and Space or
-E; a battery readout, an event log and a live population. 22 checks in
-`sim.test.mjs`.
+E; a battery readout, an event log and a live population. 23 checks in
+`sim.test.mjs`. Spawns and hit rolls use separate random streams, so firing
+  never changes where the next contact appears and `?seed=N` replays comparably.
 
 - **Rules as written in this spec**, with these choices where it was silent: the
   nearest ready battery fires; a refused press (no target, out of range, all

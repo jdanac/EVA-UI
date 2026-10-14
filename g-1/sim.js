@@ -66,7 +66,11 @@ const SIM = (() => {
   }
 
   function create(seed = 1) {
-    const random = seeded(seed);
+    // Two random streams from one seed: one for where contacts come from, one for
+    // whether rounds hit. Kept apart so the player's firing can never change where
+    // the next contact appears, which would make two runs of one seed incomparable.
+    const bearingRandom = seeded(seed);
+    const hitRandom = seeded(seed ^ 0x9E3779B9);
     const contacts = [];      // every contact so far, including finished ones
     const shots = [];         // rounds in the air
     const batteries = BATTERIES.map(b => ({ ...b, rounds: MAGAZINE, cooldown: 0, reload: 0 }));
@@ -102,7 +106,7 @@ const SIM = (() => {
     }
 
     // A random bearing inside the sea sector
-    const spawnRandom = kind => spawn(kind, SECTOR[0] + random() * (SECTOR[1] - SECTOR[0]));
+    const spawnRandom = kind => spawn(kind, SECTOR[0] + bearingRandom() * (SECTOR[1] - SECTOR[0]));
 
     // What firing at a contact would do right now, without firing:
     //   inRange  batteries within range, whether or not they can fire this moment
@@ -139,7 +143,7 @@ const SIM = (() => {
       shots.push({
         id: ++shotSerial, battery: battery.id, target: c.id,
         t0: time, t1: time + d / SHOT_KMS,
-        hit: random() < chance,       // rolled now, shown when the round lands
+        hit: hitRandom() < chance,       // rolled now, shown when the round lands
       });
       events.push({ type: 'fire', id: c.id, battery: battery.id, chance, t: time });
       return { ok: true, battery: battery.id };

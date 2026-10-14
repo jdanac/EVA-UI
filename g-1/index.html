@@ -107,7 +107,8 @@
       </div>
     </section>
 
-    <!-- Bottom bar: controls for testing, the latest event as a one-line ticker, and
+    <!-- Bottom bar: controls for testing, the latest event as a one-line ticker (hidden from
+         screen readers: the log in the BATTERIES box already says it), and
          the city's population. Hidden until script.js runs, since nothing here works
          without it. -->
     <form class="bar" novalidate hidden>
@@ -121,7 +122,7 @@
       </label>
       <button class="btn" id="detect" type="submit">DETECT</button>
       <button class="btn" id="reset" type="button">RESET</button>
-      <p class="ticker" id="ticker" role="log" aria-label="Latest event" data-level="idle"><span class="ticker__ja" lang="ja">待機中</span> <span class="ticker__en">STANDBY</span></p>
+      <p class="ticker" id="ticker" aria-hidden="true" data-level="idle"><span class="ticker__ja" lang="ja">待機中</span> <span class="ticker__en">STANDBY</span></p>
       <p class="pop" data-hit="false"><span class="pop__label"><span lang="ja">人口</span> POPULATION</span><span class="pop__num" id="pop">891,285</span></p>
     </form>
 

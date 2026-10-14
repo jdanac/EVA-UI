@@ -284,5 +284,19 @@ test('a scripted run with the same seed repeats exactly, down to the events', ()
   assert.notEqual(play(5), play(6));
 });
 
+test('firing never changes where the next contact comes from', () => {
+  const bearings = fire => {
+    const sim = SIM.create(11);
+    const out = [];
+    const first = sim.spawnRandom('STANDARD');
+    out.push(first.bearing);
+    runUntil(sim, () => sim.dist(first) <= 9);
+    if (fire) { sim.engage(first.id); sim.engage(first.id); }   // draws from the hit stream
+    for (const kind of ['SCOUT', 'HEAVY', 'STANDARD']) out.push(sim.spawnRandom(kind).bearing);
+    return out;
+  };
+  assert.deepEqual(bearings(true), bearings(false));
+});
+
 console.log(failed ? `\n${failed} failed` : '\nall passed');
 process.exit(failed ? 1 : 0);
