@@ -2,7 +2,7 @@
 
 NGE UI exploration: recreations of Neon Genesis Evangelion style screens in plain HTML and CSS, with no build step. Studies start CSS only, and vanilla JavaScript is added where a screen needs to be interactive.
 
-Each study has a code (a letter for its screen type plus a number) and lives in a lowercase folder of the same name, for example `W-1` in `w-1/`. Open its `index.html` in a browser to view it.
+Each study has a code (a letter for its screen type plus a number) and lives in a lowercase folder of the same name, for example `W-1` in `w-1/`. Open its `index.html` in a browser to view it. Published: https://jdanac.github.io/EVA-UI/
 
 | Study | Screen |
 | --- | --- |
