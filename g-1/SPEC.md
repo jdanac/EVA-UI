@@ -94,23 +94,29 @@ All of this stays; most of it is the stage the commands will play on.
   knows nothing about longitude, latitude or pixels.
 - `sim.js`: the rules with no DOM, fixed step, and a seeded random generator in
   two separate streams (spawns and hit rolls, so firing never changes where the
-  next contact comes from, and `?seed=N` replays comparably). 23 checks in
+  next contact comes from, and `?seed=N` replays comparably). 29 checks in
   `sim.test.mjs` (`node g-1/sim.test.mjs`).
+- The run: a scripted, escalating schedule of 23 contacts (`SIM.schedule(seed)`,
+  bearings from the seed). The page plays it from the start, and the arena
+  plays the same one, so a person's `?seed=N` is the bots' seed N (as long as
+  DETECT, which adds extra contacts for testing, is not used). It ends in
+  CITY HELD when the last contact is finished, or GEOFRONT BREACHED.
 - A circular radar scope (24.5 km, rings every 5 km, a sweep that is Tokyo-3's
   own radar) over the Sagami Bay coast, a wide-area map, a contact list sorted
   by time to impact, a selected-contact panel, a battery readout, an event log
   and a ticker. Tokyo-3 with its Geofront is drawn at the center.
-- Contacts: SCOUT, STANDARD and HEAVY flying a straight line at the city from a
-  bearing in the sea sector (100 to 230 degrees), spawning 40 km out and
-  reaching the scope at 24.5 km.
-- Three batteries (north, south, east) with range, a magazine, cooldown and
-  reload, rounds with flight time and a hit chance that falls with distance
-  (85% close to 35% at the edge of the range), hull damage, destroyed and
-  impact states, and population loss.
-- **Milestone A rules are built** (2026-10-14): fire orders, the shared pool,
-  RAIDER and the minimal Geofront integrity, with the screen for them (order
-  buttons and keys 1 to 3, H, Space to pause, ammo and Geofront readouts, a
-  breach banner). See "Milestone A: first arena results".
+- Contacts: STANDARD and HEAVY flying a straight line at the city, and RAIDER
+  flying at a battery, from a bearing in the sea sector (100 to 230 degrees),
+  spawning 40 km out and reaching the scope at 24.5 km. (SCOUT is still in the
+  sim's table but not in the run.)
+- Three batteries (north, south, east) under fire orders, drawing on one shared
+  ammunition pool, with rounds that have a flight time and a hit chance that
+  falls with distance (85% close to 20% at the edge of the range), hull
+  damage, destroyed and impact states, population loss and Geofront integrity.
+- **Milestone A is built** (2026-10-14): the rules in "Milestone A in detail",
+  with the screen for them (order buttons and keys 1 to 3, H, Space to pause,
+  ammo and Geofront readouts, order lines on the scope, the end banners). See
+  "Milestone A: first arena results".
 - **Known gaps:** no OpenStreetMap detail on the scope (Overpass was down on
   2026-10-14; retry with `node tools/geo.mjs detail sagami-detail 138.77 35.013
   139.31 35.453 --out g-1/data --roads "motorway|trunk|primary|secondary"
@@ -173,7 +179,7 @@ next.
 C1, C2 and C3, with the minimal C5 (Geofront integrity and the breach) and the
 arena (below), are the first milestone, because none of them shows a margin
 alone. The arena plays a fixed, scripted contact schedule for each seed (timed
-spawns that escalate, held in the arena script), so real waves are not needed
+spawns that escalate, `SIM.schedule`), so real waves are not needed
 yet. After it, a bot that plays well must beat a bot that just gives all the
 batteries the soonest contact, by a clear margin (see "How to tell a mechanic is
 working"). Only then do waves in the game (C4) and the rest go on, and the
@@ -228,8 +234,8 @@ means game time: pausing to think is allowed, but the contact still closes
 while you wait in game time.
 
 **The arena.**
-- A seed fixes everything: the schedule of kinds and times is written in the
-  arena script, and the seed varies the bearings, the raiders' targets and the
+- A seed fixes everything: the schedule of kinds and times is fixed
+  (`SIM.schedule`, shared with the page), and the seed varies the bearings, the raiders' targets and the
   hit rolls.
 - Bots decide once a game second, not every step, so a gap measures judgment,
   not reaction speed.
@@ -277,6 +283,9 @@ habit deep. What the gap is made of, from switching parts of PRIORITY off:
   for example a raider that is not the soonest (a slower one, or one that
   stops to fire), or heavies that matter more to the Geofront than their ETA
   says.
+
+The ablation numbers came from one-off edits to the bot outside the repo; the
+table above is what `node g-1/arena.mjs` prints.
 
 The human test (five runs, four questions) is the next check, before C4.
 

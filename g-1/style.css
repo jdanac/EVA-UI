@@ -600,7 +600,9 @@ body {
 .banner--paused { --st: var(--warn); }
 .banner--breach { --st: var(--alert); top: 50%; transform: translate(-50%, -50%); font-size: 18px; padding: 10px 20px 10px 18px; }
 .screen[data-paused="true"] .banner--paused { display: block; }
+.banner--held { --st: var(--cyan); top: 50%; transform: translate(-50%, -50%); font-size: 18px; padding: 10px 20px 10px 18px; }
 .screen[data-state="breached"] .banner--breach { display: block; }
+.screen[data-state="held"] .banner--held { display: block; }
 .screen[data-state="breached"] .banner--paused { display: none; }
 
 /* Paused: everything that moves on its own stands still too */

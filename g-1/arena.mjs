@@ -14,19 +14,7 @@ const SEEDS = Number(process.argv[2]) || 300;
 const DECIDE = 1;          // bots decide once a game second, never every step
 const END = 300;           // seconds a run lasts at most
 
-// The scripted schedule: [time in seconds, kind], escalating. The seed varies
-// the bearings, the raiders' batteries and (inside the sim) the hit rolls.
-const SCHEDULE = [
-  [0, 'STANDARD'],
-  [15, 'STANDARD'], [18, 'RAIDER'],
-  [35, 'HEAVY'], [40, 'STANDARD'],
-  [60, 'STANDARD'], [62, 'STANDARD'], [65, 'RAIDER'],
-  [85, 'HEAVY'], [88, 'STANDARD'], [90, 'RAIDER'], [92, 'STANDARD'],
-  [115, 'HEAVY'], [116, 'HEAVY'], [120, 'STANDARD'], [122, 'RAIDER'], [124, 'STANDARD'],
-  [145, 'HEAVY'], [146, 'STANDARD'], [147, 'STANDARD'], [149, 'RAIDER'], [150, 'RAIDER'], [152, 'HEAVY'],
-];
-
-// The same mulberry32 as sim.js, for the arena's own streams
+// The same mulberry32 as sim.js, for the RANDOM bot's own stream
 function seeded(seed) {
   let a = seed >>> 0;
   return () => {
@@ -128,9 +116,8 @@ const BOTS = {
 
 function play(bot, seed) {
   const sim = SIM.create(seed);
-  const bearings = seeded(seed ^ 0x51ED);
   const botRandom = seeded(seed ^ 0xB07);
-  const queue = SCHEDULE.map(([t, kind]) => ({ t, kind, bearing: SIM.SECTOR[0] + bearings() * (SIM.SECTOR[1] - SIM.SECTOR[0]) }));
+  const queue = SIM.schedule(seed);
   let nextDecision = 0, fired = 0;
 
   while (sim.time < END && !sim.breached) {
@@ -162,7 +149,7 @@ for (const name of Object.keys(BOTS)) {
   };
 }
 
-console.log(`${SEEDS} seeds, ${SCHEDULE.length} contacts each, bots decide every ${DECIDE} s\n`);
+console.log(`${SEEDS} seeds, ${SIM.schedule(1).length} contacts each, bots decide every ${DECIDE} s\n`);
 console.log('bot        population left     breached  geofront  rounds fired');
 for (const [name, r] of Object.entries(results)) {
   console.log(`${name.padEnd(10)} ${Math.round(r.population).toLocaleString('en').padStart(9)} (${pct(r.population, SIM.START_POPULATION).padStart(6)})   ${pct(r.breaches, SEEDS).padStart(6)}   ${r.integrity.toFixed(0).padStart(6)}   ${r.fired.toFixed(0).padStart(8)}`);

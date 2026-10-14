@@ -36,9 +36,9 @@
   </svg>
 
   <!-- The screen: a fixed 1280x720 box (scaled to fit the window by script.js).
-       script.js sets data-state here (idle while nothing is inbound, running while
-       something is). The panels are placed with absolute offsets. -->
-  <main class="screen" data-state="idle">
+       script.js sets data-state here (running while the scripted run is on, held
+       when it is over, breached if the Geofront fell). The panels are placed with absolute offsets. -->
+  <main class="screen" data-state="running">
 
     <!-- Wide area: the whole approach, so a contact is seen coming before it reaches the scope.
          script.js draws the land and puts a dot on it for every contact. -->
@@ -50,8 +50,9 @@
 
     <!-- The scope: the main map and where the game is played. Land, range rings and
          the sweep are drawn by script.js; the second svg holds the contacts, which
-         are clickable. The two banners show only when the screen is paused or the
-         Geofront is breached (data-paused and data-state on .screen). -->
+         are clickable. The banners show only when the screen is paused, the
+         Geofront is breached, or the run is over and held (data-paused and
+         data-state on .screen). -->
     <section class="panel panel--scope" aria-label="Radar scope">
       <svg id="scope" viewBox="0 0 612 612" aria-hidden="true"></svg>
       <svg id="scope-live" class="live" viewBox="0 0 612 612"></svg>
@@ -60,6 +61,7 @@
       <p class="panel__tag"><span lang="ja">相模湾</span> SAGAMI BAY</p>
       <p class="banner banner--paused"><span lang="ja">一時停止</span> PAUSED</p>
       <p class="banner banner--breach"><span lang="ja">ジオフロント侵入</span> GEOFRONT BREACHED</p>
+      <p class="banner banner--held"><span lang="ja">防衛成功</span> CITY HELD</p>
     </section>
 
     <!-- Left, under the wide map: the three batteries (what each is on and what it

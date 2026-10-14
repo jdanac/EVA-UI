@@ -167,6 +167,7 @@ let shown = new Map();       // contact id -> the elements that show it
 let gone = new Set();        // ids already faded out (the sim still lists them, so they must not be drawn again)
 let selected = null;         // id of the selected contact
 let paused = false;          // the sim stands still; orders can still be given
+let queue = [];              // the run's contacts still to come (SIM.schedule), soonest first
 
 const SIZE = { SCOUT: 3.5, STANDARD: 5, HEAVY: 7, RAIDER: 3.5 };   // dot radius by type, in scope pixels
 const FADE = 2.5;            // seconds a finished contact stays before it is removed
@@ -195,6 +196,7 @@ const mmss = t => `T+${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Mat
 function begin() {
   seed = Number(params.get('seed')) || Math.floor(Math.random() * 1e9);
   sim = SIM.create(seed);
+  queue = SIM.schedule(seed);
   document.querySelector('#seed').textContent = seed;
   for (const v of shown.values()) v.remove();
   shown.clear();
@@ -353,7 +355,7 @@ function refresh(force) {
   const cur = sim.contacts.find(c => c.id === selected);
   if (!cur || cur.state !== 'inbound') selected = inbound.length ? inbound[0].id : null;
 
-  stage.dataset.state = sim.breached ? 'breached' : inbound.length ? 'running' : 'idle';
+  stage.dataset.state = sim.breached ? 'breached' : !queue.length && !inbound.length ? 'held' : 'running';
   clockEl.textContent = mmss(sim.time);
   popEl.textContent = sim.population.toLocaleString('en-US');
   gfEl.textContent = `${Math.round(100 * sim.integrity / SIM.INTEGRITY)}%`;
@@ -524,6 +526,11 @@ function tick(now) {
   if (last && !paused) owed += Math.min(0.25, (now - last) / 1000);
   last = now;
   while (owed >= SIM.STEP) {
+    // The run's contacts come in on the schedule, as they do in the arena
+    while (queue.length && queue[0].t <= sim.time) {
+      const q = queue.shift();
+      sim.spawn(q.kind, q.bearing);
+    }
     sim.step(SIM.STEP);
     owed -= SIM.STEP;
   }

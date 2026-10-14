@@ -362,6 +362,17 @@ test('a raider with no battery given picks one from the spawn stream, the same f
   assert.equal(SIM.create(1).spawn('STANDARD', 150, 'north').objective, 'city');
 });
 
+test('the schedule is in time order, in the sea sector, and the same for a seed', () => {
+  const a = SIM.schedule(9), b = SIM.schedule(9), c = SIM.schedule(10);
+  assert.deepEqual(a, b);
+  assert.notDeepEqual(a.map(x => x.bearing), c.map(x => x.bearing));
+  assert.deepEqual(a.map(x => [x.t, x.kind]), c.map(x => [x.t, x.kind]));
+  for (let i = 0; i < a.length; i++) {
+    assert.ok(a[i].bearing >= SECTOR[0] && a[i].bearing < SECTOR[1]);
+    if (i) assert.ok(a[i].t >= a[i - 1].t);
+  }
+});
+
 test('a scripted run with the same seed repeats exactly, down to the events', () => {
   const play = seed => {
     const sim = SIM.create(seed);

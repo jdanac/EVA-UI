@@ -74,6 +74,27 @@ const SIM = (() => {
     };
   }
 
+  // The run: [time in seconds, kind], escalating. Until waves (C4) exist this
+  // is the whole game, and the arena plays the same one, so a person's run of
+  // ?seed=N can be set against the bots' run of seed N.
+  const SCHEDULE = [
+    [0, 'STANDARD'],
+    [15, 'STANDARD'], [18, 'RAIDER'],
+    [35, 'HEAVY'], [40, 'STANDARD'],
+    [60, 'STANDARD'], [62, 'STANDARD'], [65, 'RAIDER'],
+    [85, 'HEAVY'], [88, 'STANDARD'], [90, 'RAIDER'], [92, 'STANDARD'],
+    [115, 'HEAVY'], [116, 'HEAVY'], [120, 'STANDARD'], [122, 'RAIDER'], [124, 'STANDARD'],
+    [145, 'HEAVY'], [146, 'STANDARD'], [147, 'STANDARD'], [149, 'RAIDER'], [150, 'RAIDER'], [152, 'HEAVY'],
+  ];
+
+  // The schedule for one seed, with a bearing in the sea sector for each entry,
+  // from a stream of its own: { t, kind, bearing }, in time order. Whoever runs
+  // the sim spawns each entry when sim.time reaches its t.
+  function schedule(seed) {
+    const random = seeded(seed ^ 0x51ED);
+    return SCHEDULE.map(([t, kind]) => ({ t, kind, bearing: SECTOR[0] + random() * (SECTOR[1] - SECTOR[0]) }));
+  }
+
   function create(seed = 1) {
     // Two random streams from one seed: one for where contacts come from (and
     // which battery a raider picks), one for whether rounds hit. Kept apart so
@@ -314,7 +335,7 @@ const SIM = (() => {
   }
 
   return {
-    create, hitChance, KINDS, BATTERIES, STEP, SPAWN_KM, SCOPE_KM, CITY_KM, RAID_KM, SECTOR,
+    create, schedule, hitChance, KINDS, BATTERIES, STEP, SPAWN_KM, SCOPE_KM, CITY_KM, RAID_KM, SECTOR,
     RANGE_KM, COOLDOWN, RETARGET, SILENCED, POOL, RESUPPLY, SHOT_KMS, SHOT_DAMAGE,
     START_POPULATION, INTEGRITY,
   };
