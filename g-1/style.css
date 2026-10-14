@@ -1,0 +1,582 @@
+/* =========================================================
+   G-1 RADAR DEFENSE
+   script.js draws the maps and the contacts as SVG and sets data-* attributes
+   from what sim.js is doing; this file styles all of it, so a color change here
+   recolors everything.
+   Read top to bottom: variables, screen, panels, map layers, live layer,
+   side boxes, bottom bar, fit.
+   ========================================================= */
+
+
+/* ---------- 1. VARIABLES ---------- */
+:root {
+  --menu: #ffc23d;        /* the dashboard button: same yellow on every study */
+  --amber: #ffa31a;       /* land, labels, frames, tags */
+  --amber-dim: #5c3c0c;   /* range rings and secondary lines */
+  --cyan: #22d3cc;        /* water, information */
+  --cyan-dim: #0d4f4c;
+  --alert: #ff3b1f;       /* contacts, impact, danger */
+  --warn: #ffc23d;        /* a yellower amber, for markers that must stand out from the map lines */
+  --ok: #3ee08a;
+  --ink: #f1eee6;
+  --bg: #000000;
+
+  --font-jp: 'Shippori Mincho B1', serif;
+  --font-label: 'Archivo Narrow', sans-serif;
+  --font-mono: 'Share Tech Mono', monospace;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: grid;         /* with margin: auto on .screen, centers it both ways */
+  background-color: #0a0a0a;
+
+  /* Registration marks, as in the other studies: one 48px tile with a 1px cross,
+     centered. #584410 is a dim amber; an SVG url cannot read a CSS variable,
+     so the hex is written out as %23584410. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M19 24.5h10M24.5 19v10' stroke='%23584410' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-position: center;
+}
+
+/* Holds the hatch pattern. Zero size but not display: none, which would stop
+   the maps from finding it. */
+.defs { position: absolute; }
+#hatch path {
+  stroke: var(--cyan);
+  stroke-width: 1.4;
+  opacity: 0.45;
+}
+
+
+/* ---------- 2. THE SCREEN ----------
+   Fixed size. Everything inside is placed with absolute offsets:
+   a left column (wide map, scope facts), the scope in the middle, a right
+   column (contacts, the selected contact), and a bar along the bottom. */
+.screen {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+  margin: auto;          /* centers both ways; in a small window it drops to zero and the page scrolls */
+  zoom: var(--scale, 1); /* set by script.js to fit the window, see section 8 */
+}
+
+/* The way back to the dashboard (the homepage). It sits outside the screen,
+   pinned to the corner of the window, so it is never scaled or clipped with
+   the stage and takes up no room in the centered layout. The yellow is the
+   same on every study so it reads as the site's own control, not part of the
+   screen. The black fill keeps the registration marks from showing through. */
+.menu {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 12px 5px 10px;
+  background: #000;
+  border: 1px solid var(--menu);
+  color: var(--menu);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  text-decoration: none;
+}
+.menu::before {                  /* small left-pointing arrow: "back" */
+  content: "";
+  border: 5px solid transparent;
+  border-left: 0;
+  border-right: 7px solid currentColor;
+}
+.menu__jp {
+  padding-left: 10px;
+  border-left: 1px solid var(--menu);
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+.menu:hover, .menu:focus-visible { background: var(--menu); color: #000; }
+.menu:hover .menu__jp, .menu:focus-visible .menu__jp { border-left-color: #000; }
+.menu:focus-visible { outline: 2px solid var(--menu); outline-offset: 3px; }
+
+
+/* ---------- 3. PANELS ----------
+   The two maps. The wide one has the amber frame drawn over it; the scope is
+   a circle, so its frame is the bezel drawn inside the svg. */
+.panel {
+  position: absolute;
+  overflow: hidden;
+}
+.panel--wide  { left: 20px;  top: 20px; width: 300px; height: 300px; }
+.panel--scope { left: 332px; top: 20px; width: 612px; height: 612px; }
+
+.panel svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The second svg, with the moving parts, lies over the map. It ignores the
+   pointer except on the contacts' hit circles, so a click goes to a contact or
+   nowhere. */
+.panel svg.live {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The amber frame is drawn over the map, not as a border, so the svg can use
+   the whole panel and its coordinates match the panel exactly */
+.panel--wide::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--amber);
+  pointer-events: none;
+}
+
+/* Region name, bottom left, on black so it stays readable over the map */
+.panel__tag {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  margin: 0;
+  padding: 4px 12px 4px 10px;
+  background: var(--bg);
+  border-top: 2px solid var(--amber);
+  border-right: 2px solid var(--amber);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: var(--amber);
+}
+.panel__tag [lang="ja"] {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.panel__sep { color: var(--amber-dim); }
+.panel--scope .panel__tag { left: 0; border-left: 2px solid var(--amber); }
+
+
+/* ---------- 4. MAP LAYERS ----------
+   Classes written by script.js. The glow is a drop-shadow on a whole group,
+   which is far cheaper than one on every line. */
+.glow { filter: drop-shadow(0 0 2.5px rgba(255, 163, 26, 0.65)); }
+
+.sea { fill: url(#hatch); }
+.land {
+  fill: var(--bg);
+  stroke: var(--amber);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  fill-rule: evenodd;
+}
+
+/* Range rings and the crosshair */
+.ring { fill: none; stroke: var(--amber-dim); stroke-width: 1; }
+.ring__label {
+  fill: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+.axis { stroke: var(--amber-dim); stroke-width: 1; }
+
+/* The bezel: the circle frame, a tick every 10 degrees, bearings beside them */
+.bezel > circle { fill: none; stroke: var(--amber); stroke-width: 3; }
+.bezel__ticks line { stroke: var(--amber); stroke-width: 1.2; }
+.bezel__labels text {
+  fill: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+
+/* The sweep turns once every 4 seconds around the center of the scope. The
+   origin is written in pixels because a group in an svg has no box of its own
+   for a percentage to refer to. */
+.sweep {
+  transform-origin: 306px 306px;
+  animation: sweep 4s linear infinite;
+}
+.sweep path { fill: var(--cyan); stroke: none; }
+.sweep line { stroke: var(--cyan); stroke-width: 1.6; opacity: 0.8; }
+@keyframes sweep {
+  to { transform: rotate(360deg); }
+}
+
+/* Tokyo-3: drawn by hand, not from data. The black ground hides the map under it. */
+.city path { fill: none; stroke: var(--amber); stroke-width: 0.9; stroke-linejoin: round; }
+.city .city__ground { fill: var(--bg); stroke: var(--bg); stroke-width: 3px; }
+.city .city__ring { fill: none; stroke: var(--amber); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.8; }
+
+/* A site: a hollow diamond (battery) or circle (radar) with its name */
+.site__mark { fill: var(--bg); stroke: var(--cyan); stroke-width: 1.8; }
+.site__ja {
+  fill: var(--cyan);
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+
+/* Wide map: the spawn circle, the scope circle and the city */
+.ring--dash  { stroke: var(--amber); stroke-dasharray: 3 4; opacity: 0.7; }
+.ring--scope { stroke: var(--ink); stroke-width: 1.3; }
+.wide__city  { fill: var(--amber); }
+
+
+/* ---------- 5. LIVE LAYER: CONTACTS ----------
+   Red is hostile, as in T-1. A selected contact gets a white ring and a dashed
+   line to the city. A contact that has hit the city flashes and is removed
+   by script.js a moment later. */
+.route {
+  stroke: var(--ink);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 5;
+  opacity: 0.7;
+}
+.route[data-on="false"] { display: none; }
+
+.trail { fill: none; stroke: var(--alert); stroke-width: 2; stroke-linejoin: round; opacity: 0.6; }
+.trail[data-scope="false"] { display: none; }
+
+.contact { pointer-events: none; }
+.contact[data-scope="false"] { display: none; }
+.contact__hit { fill: transparent; pointer-events: all; cursor: pointer; }
+.contact__dot { fill: var(--alert); }
+.contact__ring {
+  fill: none;
+  stroke: var(--alert);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse 1.2s ease-out infinite;
+}
+.contact__label {
+  fill: var(--alert);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+}
+.contact[data-selected="true"] .contact__label { fill: var(--ink); }
+.contact[data-selected="true"] .contact__ring { stroke: var(--ink); }
+.contact[data-selected="true"] .contact__dot { stroke: var(--ink); stroke-width: 1.5; }
+
+.contact[data-state="impact"] .contact__dot { fill: var(--ink); }
+.contact[data-state="impact"] .contact__ring { animation-duration: 0.5s; stroke-width: 3; }
+
+.wide__contact { fill: var(--alert); }
+.wide__contact[data-selected="true"] { stroke: var(--ink); stroke-width: 1.5; }
+.wide__contact[data-state="impact"] { fill: var(--ink); }
+
+@keyframes pulse {
+  0%   { transform: scale(0.5); opacity: 0.9; }
+  100% { transform: scale(2);   opacity: 0; }
+}
+
+
+/* ---------- 6. SIDE BOXES ----------
+   Each is an outlined body under an inverted tag (amber background, black
+   text), the same color swap as the countdown tag in W-1. */
+.cell {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cell--info     { left: 20px;  top: 332px; width: 300px; height: 300px; }
+.cell--contacts { left: 956px; top: 20px;  width: 304px; height: 300px; }
+.cell--target   { left: 956px; top: 332px; width: 304px; height: 300px; }
+
+.cell__tag {
+  margin: 0;
+  padding: 3px 10px;
+  background: var(--amber);
+  color: var(--bg);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+}
+.cell__tag [lang="ja"] {
+  font-family: var(--font-jp);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  margin-right: 4px;
+}
+.cell__body {
+  flex: 1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 2px solid var(--amber);
+  border-top: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  min-height: 0;
+}
+
+/* Label on the left, value on the right */
+.rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 6px;
+  align-content: start;
+  margin: 0;
+}
+.rows dt { color: var(--amber); }
+.rows dd { margin: 0; text-align: right; }
+.cell--info .rows { align-content: space-between; }
+.rows__credit { grid-column: 1 / -1; font-size: 9px; color: var(--amber-dim); }
+
+/* Contacts: one boxed row each. Inbound is amber; the selected one is inverted,
+   like a tag; one that has hit the city is red and dim. */
+.cell--contacts .cell__body { padding: 6px; overflow: hidden; position: relative; }
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.row {
+  --st: var(--amber);
+  display: grid;
+  grid-template-columns: 46px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--st);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--st);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-align: left;
+  cursor: pointer;
+}
+.row__id { font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.06em; }
+.row__kind [lang="ja"] { font-family: var(--font-jp); font-weight: 800; font-size: 13px; letter-spacing: 0.02em; }
+.row__eta { font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.06em; }
+.row:hover { background: var(--amber-dim); }
+.row[data-selected="true"] { background: var(--st); color: var(--bg); }
+.row[data-state="impact"] { --st: var(--alert); opacity: 0.7; }
+.row:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.list__empty {
+  margin: 0;
+  padding: 90px 0 0;
+  text-align: center;
+  color: var(--amber-dim);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.3em;
+}
+.list__empty[hidden] { display: none; }
+.list__empty [lang="ja"] { display: block; font-family: var(--font-jp); font-size: 16px; letter-spacing: 0.1em; margin-bottom: 4px; }
+
+/* The selected contact, with the ENGAGE button under it */
+.target { display: flex; flex-direction: column; justify-content: space-between; }
+.target[data-empty="true"] .rows dd { color: var(--amber-dim); }
+.btn--engage { height: 44px; }
+.btn--engage [lang="ja"] { font-family: var(--font-jp); font-weight: 800; letter-spacing: 0.1em; margin-right: 6px; }
+
+
+/* ---------- 7. BOTTOM BAR ----------
+   Controls for trying it out (the same outlined style as M-1 and T-1), the
+   latest event as one line, and the city. 56px tall, so every control is
+   well over the 40px tap height. */
+.bar {
+  position: absolute;
+  left: 20px;
+  top: 644px;
+  width: 1240px;
+  height: 56px;
+  display: grid;
+  grid-template-columns: 220px 120px 120px 1fr 240px;
+  gap: 8px;
+  align-items: stretch;
+}
+.bar[hidden] { display: none; }
+
+.field {
+  display: flex;
+  align-items: stretch;
+  border: 2px solid var(--amber);
+  min-width: 0;
+}
+.field__label {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: var(--amber);
+  color: var(--bg);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+}
+.field__input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+}
+.btn {
+  border: 2px solid var(--amber);
+  background: var(--bg);
+  color: var(--amber);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.3em;
+  padding: 0 0 0 0.3em;   /* offsets the trailing letter space so the word stays centered */
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--amber); color: var(--bg); }
+.btn:disabled, .field__input:disabled { opacity: 0.4; cursor: default; }
+.btn:focus-visible, .field__input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -4px;
+}
+
+/* The latest event, in the color of its level: teal information, amber alert,
+   red breach. Read aloud as it changes (role="log"). */
+.ticker {
+  --st: var(--cyan);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1.5px solid var(--st);
+  border-radius: 3px;
+  color: var(--st);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ticker[data-level="alert"]  { --st: var(--warn); }
+.ticker[data-level="breach"] { --st: var(--alert); }
+.ticker__time { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; opacity: 0.8; }
+.ticker__ja { font-family: var(--font-jp); font-weight: 800; font-size: 16px; }
+.ticker__en { font-family: var(--font-label); font-weight: 700; font-size: 13px; letter-spacing: 0.2em; }
+
+/* The city: the population it still has */
+.pop {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0;
+  padding: 0 14px;
+  border: 2px solid var(--amber);
+  text-align: right;
+}
+.pop__label { font-family: var(--font-label); font-weight: 700; font-size: 11px; letter-spacing: 0.22em; color: var(--amber); }
+.pop__label [lang="ja"] { font-family: var(--font-jp); font-weight: 800; font-size: 13px; letter-spacing: 0.04em; margin-right: 4px; }
+.pop__num { font-family: var(--font-mono); font-size: 24px; line-height: 1.1; letter-spacing: 0.06em; }
+
+/* Motion is switched off for people who ask: the sweep stops and the rings
+   show as steady outlines. The contacts still move, which is the game. */
+@media (prefers-reduced-motion: reduce) {
+  .sweep, .contact__ring { animation: none; }
+  .contact__ring { opacity: 0.6; transform: scale(1.4); }
+}
+
+
+/* ---------- 8. FIT TO THE WINDOW ----------
+   script.js sets --scale on the root to the largest value that fits the
+   1280x720 stage in the window, and .screen applies it with zoom. Zoom, unlike
+   transform, changes the layout size too, so the centering in section 2 keeps
+   working and nothing is left over to scroll. Without the script the stage
+   stays at full size, centered, and scrolls.
+
+   Phones in portrait would shrink the stage to about a quarter of its size, too
+   small to read, so below 600px wide a rotate prompt covers it instead. The
+   page cannot lock the orientation itself, so it asks. */
+.rotate {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  .screen {
+    visibility: hidden;
+  }
+  .rotate {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--amber);
+    text-align: center;
+  }
+  .rotate__icon {
+    width: 56px;
+    height: 88px;
+    box-sizing: border-box;
+    border: 3px solid var(--amber);
+    border-radius: 8px;
+    transform: rotate(90deg);
+    margin-bottom: 28px;
+  }
+  .rotate__jp {
+    font-family: var(--font-jp);
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  .rotate__en {
+    font-family: var(--font-label);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    padding-left: 0.2em;   /* offsets the trailing letter space so the word stays centered */
+  }
+}

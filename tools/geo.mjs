@@ -7,20 +7,34 @@
 //       Roads, rivers, water and peaks from OpenStreetMap through Overpass
 //       (ODbL: the page must credit "OpenStreetMap contributors").
 //
-// Writes t-1/data/<name>.js containing:  GEO.<name> = { bbox, ... }
+// Options, anywhere after the mode (a wide region needs less detail to stay small):
+//   --out <dir>      folder to write into (default t-1/data)
+//   --roads <regex>  highway classes to keep (default motorway|trunk|primary|secondary|tertiary)
+//   --rivers <regex> waterway classes to keep (default river|stream)
+//
+// Writes <out>/<name>.js containing:  GEO.<name> = { bbox, ... }
 // Coordinates are [lon, lat], rounded to keep the files small.
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 't-1', 'data');
+const HERE = dirname(fileURLToPath(import.meta.url));
 const UA = 'eva-ui-study/0.1 (personal UI study; github jdanac/EVA-UI)';   // Overpass refuses requests without one
 
-const [mode, name, ...rest] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+function option(flag) {            // takes "--flag value" out of the arguments
+  const i = argv.indexOf('--' + flag);
+  return i < 0 ? null : argv.splice(i, 2)[1];
+}
+const OUT = join(HERE, '..', option('out') || 't-1/data');
+const ROADS = option('roads') || 'motorway|trunk|primary|secondary|tertiary';
+const RIVERS = option('rivers') || 'river|stream';
+
+const [mode, name, ...rest] = argv;
 const [west, south, east, north] = rest.slice(0, 4).map(Number);
 if (!mode || !name || [west, south, east, north].some(Number.isNaN)) {
-  console.error('usage: node tools/geo.mjs land|detail <name> <west> <south> <east> <north> [tolerance]');
+  console.error('usage: node tools/geo.mjs land|detail <name> <west> <south> <east> <north> [tolerance] [--out dir] [--roads re] [--rivers re]');
   process.exit(1);
 }
 const bbox = [west, south, east, north];
@@ -90,8 +104,8 @@ async function land() {
 async function detail() {
   const b = `(${south},${west},${north},${east})`;
   const query = `[out:json][timeout:90];(
-    way["highway"~"motorway|trunk|primary|secondary|tertiary"]${b};
-    way["waterway"~"river|stream"]${b};
+    way["highway"~"${ROADS}"]${b};
+    way["waterway"~"${RIVERS}"]${b};
     way["natural"="water"]${b};
     relation["natural"="water"]${b};
     way["railway"="rail"]${b};

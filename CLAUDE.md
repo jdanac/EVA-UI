@@ -10,6 +10,10 @@ EVA-UI is a personal UI study: recreations of Neon Genesis Evangelion style scre
 
 The repo root holds the published homepage, `index.html` and `style.css`, with no script. It is not a study, so the self-contained rule below does not apply to it, but it uses the same palette family and registration marks. The study list is a hand-written `<ol>` of `<li>` blocks, one per study, with a copyable template in a comment above it. Add a block there when a study is added, and keep links relative (`w-1/`, no leading slash) so it works on a GitHub Pages project site.
 
+## G-1: the game
+
+`g-1/` is a playable prototype built on the T-1 look, not a study, so the "one `index.html`, `style.css`, `script.js`" rule does not hold. `g-1/SPEC.md` is the plan and the place to look first: the rules, the numbers, the roadmap steps and what is built. The rules live in `sim.js` (no DOM, fixed timestep, seeded random, kilometers around the city); `script.js` only reads it and draws. Run `node g-1/sim.test.mjs` after changing `sim.js` (Node built-ins only, no package.json; the one exception to "no tests", approved). The page still opens straight from disk.
+
 ## Running a study
 
 Open `<study>/index.html` (for example `w-1/index.html`) directly in a browser. Fonts load from Google Fonts, so a network connection is needed for the intended look. To screenshot or measure the rendered page, serve the folder (`python3 -m http.server` from the repo root) rather than relying on reading the CSS.

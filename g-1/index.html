@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+  <title>G-1 Radar Defense</title>
+
+  <!-- Fonts: if these fail to load, the text falls back to generic faces -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=Share+Tech+Mono&family=Shippori+Mincho+B1:wght@800&display=swap">
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Map data baked by tools/geo.mjs (plain scripts, so the page opens from disk),
+       then the rules (sim.js, no DOM), then the screen (script.js). Order matters. -->
+  <script src="data/sagami-land.js" defer></script>
+  <script src="data/kanto.js" defer></script>
+  <script src="sim.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+
+  <!-- Back to the dashboard. Outside the screen on purpose; see .menu in style.css.
+       index.html is spelled out so it also works when opened from disk. -->
+  <a class="menu" href="../index.html" aria-label="EVA-UI dashboard, all studies">
+    <span>DASHBOARD</span><span class="menu__jp" lang="ja" aria-hidden="true">管制盤</span>
+  </a>
+
+  <!-- The diagonal hatching used for the sea, defined once and shared by both maps -->
+  <svg class="defs" width="0" height="0" aria-hidden="true">
+    <defs>
+      <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <path d="M0 0V7" />
+      </pattern>
+    </defs>
+  </svg>
+
+  <!-- The screen: a fixed 1280x720 box (scaled to fit the window by script.js).
+       script.js sets data-state here (idle while nothing is inbound, running while
+       something is). The panels are placed with absolute offsets. -->
+  <main class="screen" data-state="idle">
+
+    <!-- Wide area: the whole approach, so a contact is seen coming before it reaches the scope.
+         script.js draws the land and puts a dot on it for every contact. -->
+    <section class="panel panel--wide" aria-label="Wide area map">
+      <svg id="wide" viewBox="0 0 300 300" aria-hidden="true"></svg>
+      <svg id="wide-live" class="live" viewBox="0 0 300 300" aria-hidden="true"></svg>
+      <p class="panel__tag"><span lang="ja">広域</span> WIDE AREA</p>
+    </section>
+
+    <!-- The scope: the main map and where the game is played. Land, range rings and
+         the sweep are drawn by script.js; the second svg holds the contacts, which
+         are clickable. -->
+    <section class="panel panel--scope" aria-label="Radar scope">
+      <svg id="scope" viewBox="0 0 612 612" aria-hidden="true"></svg>
+      <svg id="scope-live" class="live" viewBox="0 0 612 612"></svg>
+      <p class="panel__tag"><span lang="ja">相模湾</span> SAGAMI BAY</p>
+    </section>
+
+    <!-- Left, under the wide map: facts about the scope and the run -->
+    <section class="cell cell--info">
+      <h2 class="cell__tag"><span lang="ja">観測</span> SCOPE</h2>
+      <dl class="cell__body rows">
+        <dt>REGION</dt>   <dd>SAGAMI BAY</dd>
+        <dt>RANGE</dt>    <dd>24.5 KM</dd>
+        <dt>RINGS</dt>    <dd>5 KM</dd>
+        <dt>SWEEP</dt>    <dd>4 S</dd>
+        <dt>SEED</dt>     <dd id="seed">-</dd>
+        <dt>CLOCK</dt>    <dd id="clock">T+00:00</dd>
+        <dt class="rows__credit">MAP DATA &copy; NATURAL EARTH</dt>
+      </dl>
+    </section>
+
+    <!-- Right, top: every contact on the way in, soonest to hit the city first.
+         Each row is a button, so the list works with the keyboard as well as the mouse. -->
+    <section class="cell cell--contacts">
+      <h2 class="cell__tag"><span lang="ja">目標</span> CONTACTS</h2>
+      <div class="cell__body">
+        <ol class="list" id="list" aria-label="Contacts, soonest to impact first"></ol>
+        <p class="list__empty" id="empty"><span lang="ja">目標なし</span> NO CONTACTS</p>
+      </div>
+    </section>
+
+    <!-- Right, bottom: the selected contact. The ENGAGE button is here but does
+         nothing yet; firing is the next step. -->
+    <section class="cell cell--target">
+      <h2 class="cell__tag"><span lang="ja">選択</span> SELECTED</h2>
+      <div class="cell__body target" id="target" data-empty="true">
+        <dl class="rows">
+          <dt>ID</dt>      <dd id="t-id">-</dd>
+          <dt>TYPE</dt>    <dd id="t-kind">-</dd>
+          <dt>BEARING</dt> <dd id="t-bearing">-</dd>
+          <dt>RANGE</dt>   <dd id="t-range">-</dd>
+          <dt>SPEED</dt>   <dd id="t-speed">-</dd>
+          <dt>ETA</dt>     <dd id="t-eta">-</dd>
+          <dt>STATUS</dt>  <dd id="t-state">-</dd>
+        </dl>
+        <button class="btn btn--engage" type="button" disabled><span lang="ja">交戦</span> ENGAGE</button>
+      </div>
+    </section>
+
+    <!-- Bottom bar: controls for testing, the latest event as a one-line ticker, and
+         the city. Hidden until script.js runs, since nothing here works without it. -->
+    <form class="bar" novalidate hidden>
+      <label class="field">
+        <span class="field__label">TYPE</span>
+        <select class="field__input" id="pick-kind">
+          <option value="STANDARD">STANDARD</option>
+          <option value="SCOUT">SCOUT</option>
+          <option value="HEAVY">HEAVY</option>
+        </select>
+      </label>
+      <button class="btn" id="detect" type="submit">DETECT</button>
+      <button class="btn" id="reset" type="button">RESET</button>
+      <p class="ticker" id="ticker" role="log" aria-label="Latest event" data-level="idle"><span class="ticker__ja" lang="ja">待機中</span> <span class="ticker__en">STANDBY</span></p>
+      <p class="pop"><span class="pop__label"><span lang="ja">人口</span> POPULATION</span><span class="pop__num">891,285</span></p>
+    </form>
+
+  </main>
+
+  <!-- Phone in portrait only: covers the screen and asks for landscape (style.css section 8) -->
+  <div class="rotate">
+    <div class="rotate__icon" aria-hidden="true"></div>
+    <div class="rotate__jp" lang="ja">画面を横向きにしてください</div>
+    <div class="rotate__en">ROTATE TO LANDSCAPE</div>
+  </div>
+
+</body>
+</html>
