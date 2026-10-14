@@ -50,26 +50,30 @@
 
     <!-- The scope: the main map and where the game is played. Land, range rings and
          the sweep are drawn by script.js; the second svg holds the contacts, which
-         are clickable. -->
+         are clickable. The two banners show only when the screen is paused or the
+         Geofront is breached (data-paused and data-state on .screen). -->
     <section class="panel panel--scope" aria-label="Radar scope">
       <svg id="scope" viewBox="0 0 612 612" aria-hidden="true"></svg>
       <svg id="scope-live" class="live" viewBox="0 0 612 612"></svg>
       <p class="panel__corner panel__corner--tl">RANGE 24.5 KM<br>RINGS 5 KM</p>
       <p class="panel__corner panel__corner--tr"><span id="clock">T+00:00</span><br>SEED <span id="seed">-</span></p>
       <p class="panel__tag"><span lang="ja">相模湾</span> SAGAMI BAY</p>
+      <p class="banner banner--paused"><span lang="ja">一時停止</span> PAUSED</p>
+      <p class="banner banner--breach"><span lang="ja">ジオフロント侵入</span> GEOFRONT BREACHED</p>
     </section>
 
-    <!-- Left, under the wide map: the three batteries (rounds left and whether each
-         can fire) and a short log of what has happened, newest first. The log is
-         read aloud as it grows. -->
+    <!-- Left, under the wide map: the three batteries (what each is on and what it
+         is doing), the shared ammunition pool, and a short log of what has
+         happened, newest first. The log is read aloud as it grows. -->
     <section class="cell cell--bat">
       <h2 class="cell__tag"><span lang="ja">砲台</span> BATTERIES</h2>
       <div class="cell__body">
         <ul class="bats" id="bats">
-          <li data-battery="north"><span class="bat__name">NORTH</span><span class="bat__pips"></span><span class="bat__state">READY</span></li>
-          <li data-battery="south"><span class="bat__name">SOUTH</span><span class="bat__pips"></span><span class="bat__state">READY</span></li>
-          <li data-battery="east"><span class="bat__name">EAST</span><span class="bat__pips"></span><span class="bat__state">READY</span></li>
+          <li data-battery="north" data-state="hold"><span class="bat__name">1 NORTH</span><span class="bat__target">-</span><span class="bat__state">HOLD</span></li>
+          <li data-battery="south" data-state="hold"><span class="bat__name">2 SOUTH</span><span class="bat__target">-</span><span class="bat__state">HOLD</span></li>
+          <li data-battery="east" data-state="hold"><span class="bat__name">3 EAST</span><span class="bat__target">-</span><span class="bat__state">HOLD</span></li>
         </ul>
+        <p class="ammo" data-low="false"><span class="ammo__label"><span lang="ja">弾薬</span> AMMO</span><span class="ammo__bar"><i id="ammo-fill"></i></span><span class="ammo__num" id="ammo">36</span></p>
         <h3 class="log__head"><span lang="ja">事象記録</span> EVENT LOG</h3>
         <ol class="log" id="log" role="log" aria-label="Event log"></ol>
         <p class="credit">MAP DATA &copy; NATURAL EARTH</p>
@@ -86,9 +90,10 @@
       </div>
     </section>
 
-    <!-- Right, bottom: the selected contact, what firing at it would do right now
-         (the hit chance and the battery that would fire), and the ENGAGE button.
-         Space or E also fires. -->
+    <!-- Right, bottom: the selected contact and the fire orders for it. Each
+         battery button puts that battery on this contact, or takes it off if it
+         is already on it (keys 1 to 3), and shows the hit chance it would have
+         now. HOLD takes every battery off whatever it is on (key H). -->
     <section class="cell cell--target">
       <h2 class="cell__tag"><span lang="ja">選択</span> SELECTED</h2>
       <div class="cell__body target" id="target" data-empty="true">
@@ -99,30 +104,38 @@
           <dt>RANGE</dt>   <dd id="t-range">-</dd>
           <dt>ETA</dt>     <dd id="t-eta">-</dd>
           <dt>HULL</dt>    <dd id="t-hull">-</dd>
-          <dt>HIT</dt>     <dd id="t-hit">-</dd>
-          <dt>BATTERY</dt> <dd id="t-battery">-</dd>
+          <dt>TARGETING</dt> <dd id="t-goal">-</dd>
           <dt>STATUS</dt>  <dd id="t-state">-</dd>
         </dl>
-        <button class="btn btn--engage" id="engage" type="button" disabled><span lang="ja">交戦</span> ENGAGE</button>
+        <div class="orders" role="group" aria-label="Fire orders for the selected contact">
+          <button class="order" type="button" data-battery="north" aria-pressed="false" disabled><span class="order__name">1 NORTH</span><span class="order__hit">-</span></button>
+          <button class="order" type="button" data-battery="south" aria-pressed="false" disabled><span class="order__name">2 SOUTH</span><span class="order__hit">-</span></button>
+          <button class="order" type="button" data-battery="east" aria-pressed="false" disabled><span class="order__name">3 EAST</span><span class="order__hit">-</span></button>
+          <button class="order order--hold" type="button" id="hold-all"><span class="order__name" lang="ja">待機</span><span class="order__hit">H HOLD</span></button>
+        </div>
       </div>
     </section>
 
-    <!-- Bottom bar: controls for testing, the latest event as a one-line ticker (hidden from
-         screen readers: the log in the BATTERIES box already says it), and
-         the city's population. Hidden until script.js runs, since nothing here works
+    <!-- Bottom bar: controls for testing, PAUSE (Space: orders can still be given
+         while paused), the latest event as a one-line ticker (hidden from
+         screen readers: the log in the BATTERIES box already says it), the
+         Geofront's integrity (zero is a breach and ends the run) and the city's
+         population, which is the score. Hidden until script.js runs, since nothing here works
          without it. -->
     <form class="bar" novalidate hidden>
       <label class="field">
         <span class="field__label">TYPE</span>
         <select class="field__input" id="pick-kind">
           <option value="STANDARD">STANDARD</option>
-          <option value="SCOUT">SCOUT</option>
           <option value="HEAVY">HEAVY</option>
+          <option value="RAIDER">RAIDER</option>
         </select>
       </label>
       <button class="btn" id="detect" type="submit">DETECT</button>
       <button class="btn" id="reset" type="button">RESET</button>
+      <button class="btn" id="pause" type="button" aria-pressed="false">PAUSE</button>
       <p class="ticker" id="ticker" aria-hidden="true" data-level="idle"><span class="ticker__ja" lang="ja">待機中</span> <span class="ticker__en">STANDBY</span></p>
+      <p class="gf" data-hit="false" data-level="ok"><span class="pop__label"><span lang="ja">ジオフロント</span> GEOFRONT</span><span class="pop__num" id="gf">100%</span></p>
       <p class="pop" data-hit="false"><span class="pop__label"><span lang="ja">人口</span> POPULATION</span><span class="pop__num" id="pop">891,285</span></p>
     </form>
 

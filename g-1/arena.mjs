@@ -5,34 +5,28 @@
 //   node g-1/arena.mjs 50         fewer, for a quick look
 // Node built-ins only: no package.json, no install.
 //
-// Today this runs against the step-2 rules (direct fire through engage()), as
-// the baseline: with one verb and identical threats the bots should come out
-// about equal. When C1 lands, the bots give assign/hold orders instead.
+// A bot gives the same orders a person can (assign a battery to a contact, or
+// hold it), sees only what the screen shows, and decides once a game second.
 
 import SIM from './sim.js';
 
 const SEEDS = Number(process.argv[2]) || 300;
 const DECIDE = 1;          // bots decide once a game second, never every step
-const END = 240;           // seconds a run lasts at most
-
-// Geofront integrity is not in the sim yet (minimal C5 is part of milestone A),
-// so the arena keeps it from the impact events with the spec's draft numbers
-const INTEGRITY = 100;
-const INTEGRITY_COST = { SCOUT: 5, STANDARD: 15, HEAVY: 40, RAIDER: 0 };
+const END = 300;           // seconds a run lasts at most
 
 // The scripted schedule: [time in seconds, kind], escalating. The seed varies
-// only the bearings (and, inside the sim, the hit rolls).
+// the bearings, the raiders' batteries and (inside the sim) the hit rolls.
 const SCHEDULE = [
   [0, 'STANDARD'],
-  [15, 'STANDARD'], [18, 'SCOUT'],
+  [15, 'STANDARD'], [18, 'RAIDER'],
   [35, 'HEAVY'], [40, 'STANDARD'],
-  [60, 'STANDARD'], [62, 'STANDARD'], [65, 'SCOUT'],
-  [85, 'HEAVY'], [88, 'STANDARD'], [90, 'SCOUT'], [92, 'STANDARD'],
-  [115, 'HEAVY'], [116, 'HEAVY'], [120, 'STANDARD'], [122, 'SCOUT'], [124, 'STANDARD'],
-  [145, 'HEAVY'], [146, 'STANDARD'], [147, 'STANDARD'], [149, 'SCOUT'], [150, 'SCOUT'], [152, 'HEAVY'],
+  [60, 'STANDARD'], [62, 'STANDARD'], [65, 'RAIDER'],
+  [85, 'HEAVY'], [88, 'STANDARD'], [90, 'RAIDER'], [92, 'STANDARD'],
+  [115, 'HEAVY'], [116, 'HEAVY'], [120, 'STANDARD'], [122, 'RAIDER'], [124, 'STANDARD'],
+  [145, 'HEAVY'], [146, 'STANDARD'], [147, 'STANDARD'], [149, 'RAIDER'], [150, 'RAIDER'], [152, 'HEAVY'],
 ];
 
-// The same mulberry32 as sim.js, for the arena's own stream of bearings
+// The same mulberry32 as sim.js, for the arena's own streams
 function seeded(seed) {
   let a = seed >>> 0;
   return () => {
@@ -44,38 +38,91 @@ function seeded(seed) {
   };
 }
 
-// What a bot may know: what the screen shows, nothing more. No rounds in the
-// air (they carry their pre-rolled hit), no future schedule.
+// What a bot may know: what the screen shows, nothing more. Rounds in the air
+// are counted (the tracers are visible) but never whether they will hit, and
+// nothing about the schedule ahead.
 function view(sim) {
   return {
     time: sim.time,
+    ammo: sim.ammo,
+    integrity: sim.integrity,
     contacts: sim.inbound().map(c => ({
-      id: c.id, kind: c.kind, x: c.x, y: c.y, hp: c.hp, maxHp: c.maxHp,
-      eta: sim.eta(c), chance: sim.aim(c).chance, ready: !!sim.aim(c).battery,
+      id: c.id, kind: c.kind, objective: c.objective, hp: c.hp, eta: sim.eta(c),
+      chance: Object.fromEntries(sim.batteries.map(b => [b.id, sim.chanceOf(b, c)])),
+      inFlight: sim.shots.filter(s => s.target === c.id).length,
     })),
-    batteries: sim.batteries.map(b => ({ id: b.id, rounds: b.rounds, state: sim.stateOf(b) })),
+    batteries: sim.batteries.map(b => ({ id: b.id, target: b.target, state: sim.stateOf(b) })),
   };
 }
 
-// A bot looks at the view and returns contact ids to fire at, in order. With
-// direct fire each id is one round from the nearest ready battery.
+// A bot looks at the view and returns orders: { battery: contact id } to
+// assign, { battery: null } to hold, and a battery left out keeps its order.
 const BOTS = {
-  // Everything at the soonest contact, every time
+  // Every battery on the soonest contact, always
   SPAM: v => {
-    const c = v.contacts.find(c => c.ready);
-    return c ? v.batteries.map(() => c.id) : [];
+    const first = v.contacts[0];
+    return Object.fromEntries(v.batteries.map(b => [b.id, first ? first.id : null]));
   },
-  // A random contact each time
+
+  // One habit, played sensibly: a battery with nothing to do takes the soonest
+  // contact and stays on it until it is finished. No retargeting, no holding.
+  STICKY: v => {
+    const first = v.contacts[0];
+    const out = {};
+    for (const b of v.batteries) if (!b.target && first) out[b.id] = first.id;
+    return out;
+  },
+
+  // The same habit, plus one rule of thumb: never fire below a 50% chance.
+  // If this does as well as PRIORITY, the game is one habit deep.
+  PATIENT: v => {
+    const out = {};
+    for (const b of v.batteries) {
+      if (b.target) continue;
+      const c = v.contacts.find(c => c.chance[b.id] !== null && c.chance[b.id] >= 0.5);
+      if (c) out[b.id] = c.id;
+    }
+    return out;
+  },
+
+  // A battery with nothing to do takes any contact at random and keeps it
   RANDOM: (v, random) => {
-    const ok = v.contacts.filter(c => c.ready);
-    return ok.length ? v.batteries.map(() => ok[Math.floor(random() * ok.length)].id) : [];
+    const out = {};
+    for (const b of v.batteries) {
+      if (b.target || !v.contacts.length) continue;
+      out[b.id] = v.contacts[Math.floor(random() * v.contacts.length)].id;
+    }
+    return out;
   },
-  // The best the step-2 rules allow: the contact that would cost the Geofront
-  // most first, among those due soon, and nothing below a 50% chance
+
+  // Uses what the rules offer: raiders and heavies first by what they would
+  // cost, no more batteries on a contact than its hull needs, and no firing
+  // below a fair hit chance (holding instead, to save the pool)
   PRIORITY: v => {
-    const ok = v.contacts.filter(c => c.ready && c.chance >= 0.5)
-      .sort((a, b) => (INTEGRITY_COST[b.kind] / (b.eta + 5)) - (INTEGRITY_COST[a.kind] / (a.eta + 5)));
-    return ok.length ? v.batteries.map(() => ok[0].id) : [];
+    const VALUE = { RAIDER: 30, HEAVY: 40, STANDARD: 15, SCOUT: 5 };
+    const MIN_CHANCE = 0.5;
+    const urgency = c => VALUE[c.kind] / (c.eta + 5);
+    const free = new Set(v.batteries.filter(b => b.state !== 'silenced').map(b => b.id));
+    const out = {};
+    for (const c of [...v.contacts].sort((a, b) => urgency(b) - urgency(a))) {
+      const hits = Math.ceil(c.hp / SIM.SHOT_DAMAGE) - c.inFlight * 0.6;
+      let want = Math.min(3, Math.max(0, Math.ceil(hits)));
+      // Batteries already on it first (no retarget delay), then the best chance
+      const bats = [...free]
+        .filter(id => v.contacts.length && c.chance[id] !== null && c.chance[id] >= MIN_CHANCE)
+        .sort((a, b) => {
+          const on = id => v.batteries.find(x => x.id === id).target === c.id ? 1 : 0;
+          return on(b) - on(a) || c.chance[b] - c.chance[a];
+        });
+      for (const id of bats) {
+        if (want <= 0) break;
+        out[id] = c.id;
+        free.delete(id);
+        want--;
+      }
+    }
+    for (const id of free) out[id] = null;
+    return out;
   },
 };
 
@@ -84,42 +131,44 @@ function play(bot, seed) {
   const bearings = seeded(seed ^ 0x51ED);
   const botRandom = seeded(seed ^ 0xB07);
   const queue = SCHEDULE.map(([t, kind]) => ({ t, kind, bearing: SIM.SECTOR[0] + bearings() * (SIM.SECTOR[1] - SIM.SECTOR[0]) }));
-  let integrity = INTEGRITY;
-  let nextDecision = 0;
+  let nextDecision = 0, fired = 0;
 
-  while (sim.time < END) {
+  while (sim.time < END && !sim.breached) {
     while (queue.length && queue[0].t <= sim.time) {
       const s = queue.shift();
       sim.spawn(s.kind, s.bearing);
     }
     if (sim.time >= nextDecision) {
       nextDecision += DECIDE;
-      for (const id of bot(view(sim), botRandom)) sim.engage(id);
+      for (const [b, id] of Object.entries(bot(view(sim), botRandom))) {
+        if (id) sim.assign(b, id); else sim.hold(b);
+      }
     }
     sim.step(SIM.STEP);
-    for (const e of sim.takeEvents()) {
-      if (e.type !== 'impact') continue;
-      const kind = sim.contacts.find(c => c.id === e.id).kind;
-      integrity -= INTEGRITY_COST[kind];
-      if (integrity <= 0) return { population: sim.population, breached: true, time: sim.time };
-    }
+    fired += sim.takeEvents().filter(e => e.type === 'fire').length;
     if (!queue.length && !sim.inbound().length) break;
   }
-  return { population: sim.population, breached: false, time: sim.time };
+  return { population: sim.population, breached: sim.breached, integrity: sim.integrity, fired };
 }
 
 const pct = (n, of) => `${(100 * n / of).toFixed(1)}%`;
+const mean = (runs, k) => runs.reduce((s, r) => s + r[k], 0) / runs.length;
 const results = {};
 for (const name of Object.keys(BOTS)) {
   const runs = Array.from({ length: SEEDS }, (_, i) => play(BOTS[name], i + 1));
-  const mean = runs.reduce((s, r) => s + r.population, 0) / SEEDS;
-  results[name] = { mean, breaches: runs.filter(r => r.breached).length };
+  results[name] = {
+    population: mean(runs, 'population'), integrity: mean(runs, 'integrity'),
+    fired: mean(runs, 'fired'), breaches: runs.filter(r => r.breached).length,
+  };
 }
 
 console.log(`${SEEDS} seeds, ${SCHEDULE.length} contacts each, bots decide every ${DECIDE} s\n`);
-console.log('bot        population left     breached');
+console.log('bot        population left     breached  geofront  rounds fired');
 for (const [name, r] of Object.entries(results)) {
-  console.log(`${name.padEnd(10)} ${Math.round(r.mean).toLocaleString('en').padStart(9)} (${pct(r.mean, SIM.START_POPULATION).padStart(6)})   ${pct(r.breaches, SEEDS).padStart(6)}`);
+  console.log(`${name.padEnd(10)} ${Math.round(r.population).toLocaleString('en').padStart(9)} (${pct(r.population, SIM.START_POPULATION).padStart(6)})   ${pct(r.breaches, SEEDS).padStart(6)}   ${r.integrity.toFixed(0).padStart(6)}   ${r.fired.toFixed(0).padStart(8)}`);
 }
-const gap = results.PRIORITY.mean / results.SPAM.mean - 1;
+const gap = results.PRIORITY.population / results.SPAM.population - 1;
 console.log(`\nPRIORITY vs SPAM: ${gap >= 0 ? '+' : ''}${(100 * gap).toFixed(1)}% population (target: +30% or more)`);
+// The harder check: against the best single habit, not the worst
+const habit = results.PRIORITY.population / results.PATIENT.population - 1;
+console.log(`PRIORITY vs PATIENT: ${habit >= 0 ? '+' : ''}${(100 * habit).toFixed(1)}% population`);

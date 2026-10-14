@@ -107,7 +107,10 @@ All of this stays; most of it is the stage the commands will play on.
   reload, rounds with flight time and a hit chance that falls with distance
   (85% close to 35% at the edge of the range), hull damage, destroyed and
   impact states, and population loss.
-- **Direct fire (ENGAGE, Space or E) is a placeholder.** Mechanic C1 replaces it.
+- **Milestone A rules are built** (2026-10-14): fire orders, the shared pool,
+  RAIDER and the minimal Geofront integrity, with the screen for them (order
+  buttons and keys 1 to 3, H, Space to pause, ammo and Geofront readouts, a
+  breach banner). See "Milestone A: first arena results".
 - **Known gaps:** no OpenStreetMap detail on the scope (Overpass was down on
   2026-10-14; retry with `node tools/geo.mjs detail sagami-detail 138.77 35.013
   139.31 35.453 --out g-1/data --roads "motorway|trunk|primary|secondary"
@@ -200,8 +203,9 @@ sites, firing arcs or different ranges).
 - `engage()` goes; the sim gains `assign(battery, contactId)` and
   `hold(battery)`.
 
-**C3 ammunition.** A shared pool of 30 rounds, with 1 round back every 6 s, up
-to 30. No magazine or reload per battery; the 1.5 s cooldown stays. The hit
+**C3 ammunition.** A shared pool of 36 rounds, with 1 round back every 5 s, up
+to 36 (tuned in the arena from a first guess of 30 and 6 s, at which every bot
+was breached). No magazine or reload per battery; the 1.5 s cooldown stays. The hit
 chance falls more steeply at long range (draft: 85% at 4 km or closer to 20% at
 12 km).
 
@@ -245,6 +249,36 @@ each battery's target and its retarget or silenced timer. The pool and the
 Geofront integrity get readouts. ENGAGE and Space/E go; Space is pause, with a
 PAUSED state on the screen. The `sim.test.mjs` checks that use `engage()` are
 rewritten.
+
+### Milestone A: first arena results
+
+300 seeds of the arena's 23-contact schedule, bots deciding once a second:
+
+| bot | population left | breached |
+|---|---|---|
+| SPAM (every battery on the soonest, always) | 5.7% | 100% |
+| STICKY (soonest, then stays on it) | 6.0% | 100% |
+| PATIENT (STICKY, but never below a 50% chance) | 47.5% | 16.3% |
+| RANDOM | 5.6% | 100% |
+| PRIORITY | 76.7% | 1.3% |
+
+On the step-2 rules PRIORITY was 1.8% behind SPAM. Now it is far ahead, and
+62% ahead of PATIENT, the best single habit, so the game is more than one
+habit deep. What the gap is made of, from switching parts of PRIORITY off:
+
+- **Fire discipline** (holding until the chance is fair) is most of it:
+  PATIENT alone goes from 6% to 47%.
+- **Allocation** (no more batteries on a contact than its hull needs) is the
+  rest: without it PRIORITY drops from 77% to 43%.
+- **Threat ranking barely matters yet:** valuing raiders and heavies the same as
+  standards costs PRIORITY only 2 points. So C2 does not yet create the
+  decision it is meant to ("which contact matters most"). Raiders are fast, so
+  "soonest first" already takes them first. The next refinement belongs here,
+  for example a raider that is not the soonest (a slower one, or one that
+  stops to fire), or heavies that matter more to the Geofront than their ETA
+  says.
+
+The human test (five runs, four questions) is the next check, before C4.
 
 ### C4. Waves, win and lose
 

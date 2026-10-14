@@ -5,7 +5,7 @@
    it only reads the sim and writes shapes, text and attributes. CSS owns every
    color and line width (data-state, data-kind, data-selected and the rest).
    Read top to bottom: geography, drawing, the live layer, the list and panels,
-   shots and bursts, the loop, controls, fit, start up.
+   shots and bursts, the loop, orders and controls, fit, start up.
    ========================================================= */
 
 const wideSvg = document.querySelector('#wide');
@@ -130,6 +130,12 @@ function sites(view) {
   }).join('');
 }
 
+// One faint line per battery, from it to whatever it is ordered onto, so the
+// orders can be read off the scope. place() moves them and turns them on.
+function links() {
+  return SIM.BATTERIES.map(b => `<line class="link" data-battery="${b.id}" data-on="false"/>`).join('');
+}
+
 function drawMaps() {
   // The scope is clipped to a circle: the sim says a contact is "on the scope"
   // at 24.5 km, so the map ends at the same distance in every direction
@@ -148,7 +154,7 @@ function drawMaps() {
   // The live layers: trails and the route under, contacts on top. Clipped
   // to the scope so a contact outside 24.5 km is only on the wide map.
   scopeLive.innerHTML = `<defs><clipPath id="live-clip"><circle cx="${scope.half}" cy="${scope.half}" r="${r}"/></clipPath></defs>`
-    + `<g clip-path="url(#live-clip)"><g id="trails"></g><line class="route" id="route" data-on="false"/><g id="shots"></g><g id="contacts"></g><g id="bursts"></g></g>`;
+    + `<g clip-path="url(#live-clip)"><g id="trails"></g><line class="route" id="route" data-on="false"/><g id="links">${links()}</g><g id="shots"></g><g id="contacts"></g><g id="bursts"></g></g>`;
   wideLive.innerHTML = '<g id="wide-dots"></g>';
 }
 
@@ -160,8 +166,9 @@ let sim = null;
 let shown = new Map();       // contact id -> the elements that show it
 let gone = new Set();        // ids already faded out (the sim still lists them, so they must not be drawn again)
 let selected = null;         // id of the selected contact
+let paused = false;          // the sim stands still; orders can still be given
 
-const SIZE = { SCOUT: 3.5, STANDARD: 5, HEAVY: 7 };   // dot radius by type, in scope pixels
+const SIZE = { SCOUT: 3.5, STANDARD: 5, HEAVY: 7, RAIDER: 3.5 };   // dot radius by type, in scope pixels
 const FADE = 2.5;            // seconds a finished contact stays before it is removed
 
 const list = document.querySelector('#list');
@@ -171,8 +178,15 @@ const clockEl = document.querySelector('#clock');
 const logEl = document.querySelector('#log');
 const popBox = document.querySelector('.pop');
 const popEl = document.querySelector('#pop');
-const engageBtn = document.querySelector('#engage');
+const gfBox = document.querySelector('.gf');
+const gfEl = document.querySelector('#gf');
+const ammoBox = document.querySelector('.ammo');
+const ammoEl = document.querySelector('#ammo');
+const ammoFill = document.querySelector('#ammo-fill');
+const pauseBtn = document.querySelector('#pause');
+const orderBtns = [...document.querySelectorAll('.order[data-battery]')];
 const sites$ = {};           // battery id -> its group on the scope
+const links$ = {};           // battery id -> its line to its target
 
 const bearingOf = c => (Math.atan2(c.x, c.y) * 180 / Math.PI + 360) % 360;
 const STATE = { inbound: ['接近中', 'INBOUND'], impact: ['着弾', 'IMPACT'], destroyed: ['撃破', 'DESTROYED'] };
@@ -186,6 +200,7 @@ function begin() {
   shown.clear();
   gone.clear();
   selected = null;
+  setPaused(false);
   for (const el of shotEls.values()) el.remove();
   shotEls.clear();
   document.querySelector('#bursts').replaceChildren();
@@ -272,16 +287,30 @@ function place() {
     }
   }
 
-  for (const b of sim.batteries) sites$[b.id].dataset.state = sim.stateOf(b);
+  // Each battery's state, and a line to what it is ordered onto
+  for (const b of sim.batteries) {
+    sites$[b.id].dataset.state = sim.stateOf(b);
+    const link = links$[b.id], t = b.target && sim.contacts.find(c => c.id === b.target);
+    if (t && t.onScope) {
+      const [x1, y1] = scope.px(b.x, b.y), [x2, y2] = scope.px(t.x, t.y);
+      link.setAttribute('x1', f(x1)); link.setAttribute('y1', f(y1));
+      link.setAttribute('x2', f(x2)); link.setAttribute('y2', f(y2));
+      link.dataset.on = 'true';
+    } else {
+      link.dataset.on = 'false';
+    }
+  }
   drawShots();
 
-  // The route: a dashed line from the selected contact to the city
+  // The route: a dashed line from the selected contact to what it is flying
+  // at, the city or (for a raider) a battery
   const route = document.querySelector('#route');
   const sel = selected && sim.contacts.find(c => c.id === selected);
   if (sel && sel.state === 'inbound') {
     const [px, py] = scope.px(sel.x, sel.y);
+    const [gx, gy] = scope.px(sel.gx, sel.gy);
     route.setAttribute('x1', f(px)); route.setAttribute('y1', f(py));
-    route.setAttribute('x2', scope.half); route.setAttribute('y2', scope.half);
+    route.setAttribute('x2', f(gx)); route.setAttribute('y2', f(gy));
     route.dataset.on = 'true';
   } else {
     route.dataset.on = 'false';
@@ -298,15 +327,24 @@ const els = {
   id: document.querySelector('#t-id'), kind: document.querySelector('#t-kind'),
   bearing: document.querySelector('#t-bearing'), range: document.querySelector('#t-range'),
   eta: document.querySelector('#t-eta'), hull: document.querySelector('#t-hull'),
-  hit: document.querySelector('#t-hit'), battery: document.querySelector('#t-battery'),
-  state: document.querySelector('#t-state'),
+  goal: document.querySelector('#t-goal'), state: document.querySelector('#t-state'),
 };
-const bats = {};             // battery id -> { pips, state } elements in the BATTERIES box
+const bats = {};             // battery id -> { target, state } elements in the BATTERIES box
 for (const li of document.querySelectorAll('#bats li')) {
-  const pips = li.querySelector('.bat__pips');
-  pips.innerHTML = '<i></i>'.repeat(SIM.MAGAZINE);
-  bats[li.dataset.battery] = { li, pips: [...pips.children], state: li.querySelector('.bat__state') };
+  bats[li.dataset.battery] = { li, target: li.querySelector('.bat__target'), state: li.querySelector('.bat__state') };
 }
+
+// What a battery's state reads as in the box, with its timer where it has one
+const BAT_WORDS = {
+  silenced: b => `SILENCED ${Math.ceil(b.silenced)}S`,
+  hold:     () => 'HOLD',
+  retarget: b => `AIMING ${b.retarget.toFixed(1)}S`,
+  range:    () => 'OUT OF RANGE',
+  dry:      () => 'NO AMMO',
+  cooling:  () => 'FIRING',
+  ready:    () => 'FIRING',
+};
+const goalOf = c => c.objective === 'city' ? 'TOKYO-3' : `${SIDE[c.objective]} BATTERY`;
 
 function refresh(force) {
   const inbound = sim.inbound();
@@ -315,9 +353,14 @@ function refresh(force) {
   const cur = sim.contacts.find(c => c.id === selected);
   if (!cur || cur.state !== 'inbound') selected = inbound.length ? inbound[0].id : null;
 
-  stage.dataset.state = inbound.length ? 'running' : 'idle';
+  stage.dataset.state = sim.breached ? 'breached' : inbound.length ? 'running' : 'idle';
   clockEl.textContent = mmss(sim.time);
   popEl.textContent = sim.population.toLocaleString('en-US');
+  gfEl.textContent = `${Math.round(100 * sim.integrity / SIM.INTEGRITY)}%`;
+  gfBox.dataset.level = sim.integrity === 0 ? 'breach' : sim.integrity <= SIM.INTEGRITY * 0.4 ? 'alert' : 'ok';
+  ammoEl.textContent = sim.ammo;
+  ammoFill.style.setProperty('--fill', (sim.ammo / SIM.POOL).toFixed(3));
+  ammoBox.dataset.low = String(sim.ammo <= 6);
 
   // Rows: soonest first, finished contacts below. Only move a row that is out of place.
   const order = [...shown.values()].sort((a, b) => {
@@ -332,33 +375,37 @@ function refresh(force) {
   }
   empty.hidden = order.length > 0;
 
-  // The selected panel, including what a shot would do: the hit chance and the
-  // battery that would fire. With none able to fire it says so, so a refused
-  // press is never a surprise.
+  // The selected panel, and the order buttons under it: each says whether that
+  // battery is on this contact and the hit chance it would have from where it is
   const c = selected && sim.contacts.find(x => x.id === selected);
+  const live = !!(c && c.state === 'inbound') && !sim.breached;
   els.target.dataset.empty = String(!c);
-  engageBtn.disabled = !(c && c.state === 'inbound');
+  for (const btn of orderBtns) {
+    const b = sim.batteries.find(x => x.id === btn.dataset.battery);
+    const chance = live ? sim.chanceOf(b, c) : null;
+    btn.disabled = !live || b.silenced > 0;
+    btn.setAttribute('aria-pressed', String(live && b.target === c.id));
+    btn.querySelector('.order__hit').textContent = !live ? '-' : b.silenced > 0 ? 'SILENCED' : chance === null ? 'OUT' : `${Math.round(chance * 100)}%`;
+  }
   if (c) {
-    const aim = sim.aim(c);
     els.id.textContent = c.id;
     els.kind.textContent = c.kind;
     els.bearing.textContent = `${String(Math.round(bearingOf(c)) % 360).padStart(3, '0')}°`;
     els.range.textContent = `${sim.dist(c).toFixed(1)} KM`;
     els.eta.textContent = `${sim.eta(c).toFixed(1)} S`;
     els.hull.textContent = `${Math.round(100 * c.hp / c.maxHp)}%`;
-    els.hit.textContent = c.state !== 'inbound' ? '-' : aim.inRange.length ? `${Math.round(aim.chance * 100)}%` : 'OUT OF RANGE';
-    els.battery.textContent = c.state !== 'inbound' ? '-' : !aim.inRange.length ? '-' : aim.battery ? SIDE[aim.battery.id] : 'CYCLING';
+    els.goal.textContent = goalOf(c);
     els.state.textContent = STATE[c.state][1];
   } else {
-    for (const k of ['id', 'kind', 'bearing', 'range', 'eta', 'hull', 'hit', 'battery', 'state']) els[k].textContent = '-';
+    for (const k of ['id', 'kind', 'bearing', 'range', 'eta', 'hull', 'goal', 'state']) els[k].textContent = '-';
   }
 
-  // The batteries: a pip for each round left, and what it is doing
+  // The batteries: what each is on, and what it is doing
   for (const b of sim.batteries) {
     const el = bats[b.id], state = sim.stateOf(b);
     el.li.dataset.state = state;
-    el.pips.forEach((pip, i) => { pip.dataset.on = String(i < b.rounds); });
-    el.state.textContent = state === 'reloading' ? `RELOAD ${b.reload.toFixed(0)}S` : state === 'cooling' ? 'COOLING' : 'READY';
+    el.target.textContent = b.target || '-';
+    el.state.textContent = BAT_WORDS[state](b);
   }
 }
 
@@ -425,17 +472,23 @@ function say(level, ja, en) {
   while (logEl.children.length > LOG_LINES) logEl.lastChild.remove();
 }
 
-const REFUSED = { target: ['交戦不能', 'NO TARGET'], range: ['射程外', 'OUT OF RANGE'], busy: ['装填中', 'BATTERIES CYCLING'] };
+const REFUSED = { target: ['交戦不能', 'NO TARGET'], silenced: ['沈黙中', 'BATTERY SILENCED'], battery: ['交戦不能', 'NO SUCH BATTERY'] };
 const WORDS = {
   spawn:     e => ['info',   '未確認目標接近', `${e.id} UNIDENTIFIED CONTACT`],
   scope:     e => ['alert',  '防衛圏侵入',     `${e.id} ENTERS SCOPE`],
+  assign:    e => ['info',   '交戦',           `${SIDE[e.battery]} ON ${e.id}`],
+  hold:      e => ['info',   '待機',           `${SIDE[e.battery]} HOLDS FIRE`],
+  released:  e => ['info',   '待機',           `${SIDE[e.battery]} STANDS DOWN, ${e.id} DONE`],
   fire:      e => ['info',   '砲撃',           `${SIDE[e.battery]} FIRES AT ${e.id}, ${Math.round(e.chance * 100)}%`],
   hit:       e => ['info',   '命中',           `${e.id} HIT, HULL ${Math.round(100 * e.hp / e.maxHp)}%`],
   miss:      e => ['alert',  '外れ',           `${e.id} MISSED`],
   wasted:    e => ['alert',  '無効',           `${e.id} ROUND WASTED`],
   destroyed: e => ['info',   '撃破',           `${e.id} DESTROYED`],
   impact:    e => ['breach', '着弾',           `${e.id} IMPACT, POPULATION -${e.damage.toLocaleString('en-US')}`],
-  refused:   e => ['alert',  ...REFUSED[e.reason].map((w, i) => i ? `${w}${e.id ? ' ' + e.id : ''}` : w)],
+  silenced:  e => ['breach', '砲台沈黙',       `${e.id} SILENCES ${SIDE[e.battery]} BATTERY`],
+  restored:  e => ['info',   '砲台復旧',       `${SIDE[e.battery]} BATTERY BACK`],
+  breach:    e => ['breach', 'ジオフロント侵入', `GEOFRONT BREACHED BY ${e.id}`],
+  refused:   e => ['alert',  ...REFUSED[e.reason].map((w, i) => i ? `${w}${e.battery ? ' ' + SIDE[e.battery] : ''}` : w)],
 };
 
 function report(events) {
@@ -446,8 +499,10 @@ function report(events) {
     if (e.type === 'miss') burst('miss', e.x, e.y);
     if (e.type === 'destroyed') burst('kill', e.x, e.y);
     if (e.type === 'impact') {
-      popBox.dataset.hit = 'true';
-      setTimeout(() => { popBox.dataset.hit = 'false'; }, 1200);
+      for (const box of [popBox, gfBox]) {
+        box.dataset.hit = 'true';
+        setTimeout(() => { box.dataset.hit = 'false'; }, 1200);
+      }
     }
   }
 }
@@ -462,11 +517,11 @@ function select(id) {
 /* ---------- THE LOOP ----------
    The sim runs in fixed steps of SIM.STEP whatever the frame rate, so a slow
    frame never changes what happens. A long pause (a hidden tab) is clipped,
-   rather than catching up in one go. */
+   rather than catching up in one go. While paused no time is owed at all. */
 let last = 0, owed = 0, hud = 0;
 
 function tick(now) {
-  if (last) owed += Math.min(0.25, (now - last) / 1000);
+  if (last && !paused) owed += Math.min(0.25, (now - last) / 1000);
   last = now;
   while (owed >= SIM.STEP) {
     sim.step(SIM.STEP);
@@ -482,25 +537,46 @@ function tick(now) {
 }
 
 
-/* ---------- CONTROLS ---------- */
+/* ---------- ORDERS AND CONTROLS ----------
+   The player never fires: they put batteries on contacts and take them off,
+   and the sim's batteries do the rest. */
 const bar = document.querySelector('.bar');
+const ORDER_KEYS = { 1: 'north', 2: 'south', 3: 'east' };
 
-// The player's one action: fire at the selected contact. The sim decides what
-// happens, and says why when nothing does.
-function engage() {
-  sim.engage(selected);
+function after() {
   report(sim.takeEvents());
   place();
   refresh();
 }
-engageBtn.addEventListener('click', engage);
+
+// A battery button: on this contact if it is not, off (HOLD) if it already is
+function toggle(batteryId) {
+  const c = selected && sim.contacts.find(x => x.id === selected);
+  if (!c || c.state !== 'inbound' || sim.breached) return;
+  const b = sim.batteries.find(x => x.id === batteryId);
+  if (b.target === c.id) sim.hold(b.id); else sim.assign(b.id, c.id);
+  after();
+}
+function holdAll() {
+  for (const b of sim.batteries) sim.hold(b.id);
+  after();
+}
+for (const btn of orderBtns) btn.addEventListener('click', () => toggle(btn.dataset.battery));
+document.querySelector('#hold-all').addEventListener('click', holdAll);
+
+function setPaused(on) {
+  paused = on;
+  stage.dataset.paused = String(on);
+  pauseBtn.setAttribute('aria-pressed', String(on));
+  pauseBtn.textContent = on ? 'RESUME' : 'PAUSE';
+}
+pauseBtn.addEventListener('click', () => setPaused(!paused));
 
 bar.addEventListener('submit', e => {
   e.preventDefault();
+  if (sim.breached) return;
   const c = sim.spawnRandom(document.querySelector('#pick-kind').value);
-  report(sim.takeEvents());
-  place();
-  refresh();
+  after();
   if (!selected) select(c.id);
 });
 document.querySelector('#reset').addEventListener('click', () => {
@@ -514,15 +590,21 @@ document.addEventListener('click', e => {
   if (hit) select(hit.dataset.id);
 });
 
-// Space or E fires; the arrow keys step through the list, soonest first. Neither
+// 1 to 3 toggle a battery on the selected contact, H holds them all, Space
+// pauses, and the arrow keys step through the list, soonest first. None of it
 // applies while a menu is open. Space is taken from buttons too (Enter still
-// presses them), so firing never also presses whatever happens to have focus.
+// presses them), so pausing never also presses whatever happens to have focus.
 const typing = e => e.target.closest?.('select, input, textarea');
 document.addEventListener('keydown', e => {
   if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key === ' ' || e.key.toLowerCase() === 'e') {
+  if (e.key === ' ') {
     e.preventDefault();
-    if (!e.repeat) engage();
+    if (!e.repeat) setPaused(!paused);
+    return;
+  }
+  if (ORDER_KEYS[e.key] || e.key.toLowerCase() === 'h') {
+    e.preventDefault();
+    if (!e.repeat) ORDER_KEYS[e.key] ? toggle(ORDER_KEYS[e.key]) : holdAll();
     return;
   }
   const dir = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
@@ -558,6 +640,7 @@ fit();
 /* ---------- START UP ---------- */
 drawMaps();
 for (const el of document.querySelectorAll('.site')) sites$[el.dataset.battery] = el;
+for (const el of document.querySelectorAll('.link')) links$[el.dataset.battery] = el;
 begin();
 bar.hidden = false;
 requestAnimationFrame(tick);
