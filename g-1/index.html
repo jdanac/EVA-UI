@@ -54,21 +54,26 @@
     <section class="panel panel--scope" aria-label="Radar scope">
       <svg id="scope" viewBox="0 0 612 612" aria-hidden="true"></svg>
       <svg id="scope-live" class="live" viewBox="0 0 612 612"></svg>
+      <p class="panel__corner panel__corner--tl">RANGE 24.5 KM<br>RINGS 5 KM</p>
+      <p class="panel__corner panel__corner--tr"><span id="clock">T+00:00</span><br>SEED <span id="seed">-</span></p>
       <p class="panel__tag"><span lang="ja">相模湾</span> SAGAMI BAY</p>
     </section>
 
-    <!-- Left, under the wide map: facts about the scope and the run -->
-    <section class="cell cell--info">
-      <h2 class="cell__tag"><span lang="ja">観測</span> SCOPE</h2>
-      <dl class="cell__body rows">
-        <dt>REGION</dt>   <dd>SAGAMI BAY</dd>
-        <dt>RANGE</dt>    <dd>24.5 KM</dd>
-        <dt>RINGS</dt>    <dd>5 KM</dd>
-        <dt>SWEEP</dt>    <dd>4 S</dd>
-        <dt>SEED</dt>     <dd id="seed">-</dd>
-        <dt>CLOCK</dt>    <dd id="clock">T+00:00</dd>
-        <dt class="rows__credit">MAP DATA &copy; NATURAL EARTH</dt>
-      </dl>
+    <!-- Left, under the wide map: the three batteries (rounds left and whether each
+         can fire) and a short log of what has happened, newest first. The log is
+         read aloud as it grows. -->
+    <section class="cell cell--bat">
+      <h2 class="cell__tag"><span lang="ja">砲台</span> BATTERIES</h2>
+      <div class="cell__body">
+        <ul class="bats" id="bats">
+          <li data-battery="north"><span class="bat__name">NORTH</span><span class="bat__pips"></span><span class="bat__state">READY</span></li>
+          <li data-battery="south"><span class="bat__name">SOUTH</span><span class="bat__pips"></span><span class="bat__state">READY</span></li>
+          <li data-battery="east"><span class="bat__name">EAST</span><span class="bat__pips"></span><span class="bat__state">READY</span></li>
+        </ul>
+        <h3 class="log__head"><span lang="ja">事象記録</span> EVENT LOG</h3>
+        <ol class="log" id="log" role="log" aria-label="Event log"></ol>
+        <p class="credit">MAP DATA &copy; NATURAL EARTH</p>
+      </div>
     </section>
 
     <!-- Right, top: every contact on the way in, soonest to hit the city first.
@@ -81,8 +86,9 @@
       </div>
     </section>
 
-    <!-- Right, bottom: the selected contact. The ENGAGE button is here but does
-         nothing yet; firing is the next step. -->
+    <!-- Right, bottom: the selected contact, what firing at it would do right now
+         (the hit chance and the battery that would fire), and the ENGAGE button.
+         Space or E also fires. -->
     <section class="cell cell--target">
       <h2 class="cell__tag"><span lang="ja">選択</span> SELECTED</h2>
       <div class="cell__body target" id="target" data-empty="true">
@@ -91,16 +97,19 @@
           <dt>TYPE</dt>    <dd id="t-kind">-</dd>
           <dt>BEARING</dt> <dd id="t-bearing">-</dd>
           <dt>RANGE</dt>   <dd id="t-range">-</dd>
-          <dt>SPEED</dt>   <dd id="t-speed">-</dd>
           <dt>ETA</dt>     <dd id="t-eta">-</dd>
+          <dt>HULL</dt>    <dd id="t-hull">-</dd>
+          <dt>HIT</dt>     <dd id="t-hit">-</dd>
+          <dt>BATTERY</dt> <dd id="t-battery">-</dd>
           <dt>STATUS</dt>  <dd id="t-state">-</dd>
         </dl>
-        <button class="btn btn--engage" type="button" disabled><span lang="ja">交戦</span> ENGAGE</button>
+        <button class="btn btn--engage" id="engage" type="button" disabled><span lang="ja">交戦</span> ENGAGE</button>
       </div>
     </section>
 
     <!-- Bottom bar: controls for testing, the latest event as a one-line ticker, and
-         the city. Hidden until script.js runs, since nothing here works without it. -->
+         the city's population. Hidden until script.js runs, since nothing here works
+         without it. -->
     <form class="bar" novalidate hidden>
       <label class="field">
         <span class="field__label">TYPE</span>
@@ -113,7 +122,7 @@
       <button class="btn" id="detect" type="submit">DETECT</button>
       <button class="btn" id="reset" type="button">RESET</button>
       <p class="ticker" id="ticker" role="log" aria-label="Latest event" data-level="idle"><span class="ticker__ja" lang="ja">待機中</span> <span class="ticker__en">STANDBY</span></p>
-      <p class="pop"><span class="pop__label"><span lang="ja">人口</span> POPULATION</span><span class="pop__num">891,285</span></p>
+      <p class="pop" data-hit="false"><span class="pop__label"><span lang="ja">人口</span> POPULATION</span><span class="pop__num" id="pop">891,285</span></p>
     </form>
 
   </main>

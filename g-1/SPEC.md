@@ -1,6 +1,6 @@
 # G-1 spec: radar defense, steps 1 to 3
 
-Status: step 1 built (see the end of this file). Every number here is a
+Status: steps 1 and 2 built (see the end of this file). Every number here is a
 starting value to tune, not a decision. This covers roadmap steps 1 to 3 only (moving
 contact, engage, pressure). Steps 4 to 7 are listed at the end so they are not
 forgotten and not built early.
@@ -190,3 +190,39 @@ random, 10 checks in `sim.test.mjs`), the screen, and the new region.
 - `?seed=N` in the URL replays a run; RESET without it picks a new seed.
 - The homepage card is not added yet, so the game is not linked from the
   dashboard until it is worth showing.
+
+## Step 2 as built
+
+Built: three batteries with rounds, cooldown and reload; a round with a flight
+time, a hit roll made when it is fired, and damage when it lands; destroyed and
+impact states; population that drops on impact; the ENGAGE button and Space or
+E; a battery readout, an event log and a live population. 22 checks in
+`sim.test.mjs`.
+
+- **Rules as written in this spec**, with these choices where it was silent: the
+  nearest ready battery fires; a refused press (no target, out of range, all
+  batteries cycling) is an event, so the log says why; a round whose target is
+  already destroyed or has hit the city is "wasted"; the hit roll uses the
+  distance at the moment of firing, and the contact is not led.
+- **Batteries are in `sim.js`** (km from the city, converted once from T-1's
+  north, south and east batteries), since the rules need them.
+- **The west radar is gone from the scope.** The sweep is Tokyo-3's own radar,
+  at the center. Idea for step 4: make a separate radar site a vulnerable
+  asset, so losing it makes the scope go blind.
+- **Layout:** the left box is now BATTERIES plus a seven-line EVENT LOG (the
+  SCOPE facts moved to the corners of the scope: range and rings top left,
+  clock and seed top right). The selected panel gained HULL, HIT (the chance of
+  the shot that would be fired right now) and BATTERY (which one, or CYCLING).
+  The ticker stays as the latest event in its level's color.
+- **A destroyed contact** turns teal and stays for 2.5 s, as an impact does.
+
+### First read on the balance (placeholder numbers, to be tuned in step 3)
+
+A stress run held Space on the selected contact against five contacts at once
+(standard, scout, heavy, standard, scout, about 500 hull in all). All five were
+destroyed and no population was lost, with 5 of 18 rounds left. So the guard
+rail in the fun test below, "spamming ENGAGE wins", is already close to failing
+before waves, resupply and decoys exist. Likely levers, in order: fewer rounds
+per magazine or a longer reload, a lower hit chance at long range, tighter
+spacing of the wave so ammo runs out, then hull values. Tune with a script
+against `sim.js` before judging by feel.

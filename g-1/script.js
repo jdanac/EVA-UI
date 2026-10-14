@@ -4,8 +4,8 @@
    rules in sim.js are doing: this file never decides anything about the game,
    it only reads the sim and writes shapes, text and attributes. CSS owns every
    color and line width (data-state, data-kind, data-selected and the rest).
-   Read top to bottom: geography, drawing, the live layer, the list and panel,
-   the loop, controls, fit, start up.
+   Read top to bottom: geography, drawing, the live layer, the list and panels,
+   shots and bursts, the loop, controls, fit, start up.
    ========================================================= */
 
 const wideSvg = document.querySelector('#wide');
@@ -25,13 +25,10 @@ const KM_PER_LON = 111.32 * Math.cos(CITY.at[1] * Math.PI / 180);
 const KM_PER_LAT = 110.57;
 const toKm = ([lon, lat]) => [(lon - CITY.at[0]) * KM_PER_LON, (lat - CITY.at[1]) * KM_PER_LAT];
 
-// The sites around Tokyo-3, as in T-1. Drawn only; firing comes later.
-const SITES = [
-  { kind: 'battery', ja: '北部砲台',     at: [138.99, 35.248] },
-  { kind: 'battery', ja: '南部砲台',     at: [139.065, 35.2] },
-  { kind: 'battery', ja: '東部砲台',     at: [139.09, 35.212] },
-  { kind: 'radar',   ja: '西部レーダー', at: [138.975, 35.232] },
-];
+// The batteries are the sim's (it needs their positions); the names are only for drawing.
+// T-1's west radar is left out: the sweep is Tokyo-3's own radar, at the center of the scope.
+const BATTERY_NAMES = { north: '北部砲台', south: '南部砲台', east: '東部砲台' };
+const SIDE = { north: 'NORTH', south: 'SOUTH', east: 'EAST' };
 
 // A view maps km to pixels: a square panel with the city in the middle that
 // shows `radius` km out to its edge
@@ -122,14 +119,14 @@ function city(view) {
     + `<g class="glow"><path d="${blocks.join('')}"/></g></g>`;
 }
 
+// Each battery: a diamond (its color follows data-state, which place() sets) inside
+// a faint ring showing how far it reaches
 function sites(view) {
-  return SITES.map(s => {
-    const [x, y] = toKm(s.at);
-    const [px, py] = view.px(x, y);
-    const mark = s.kind === 'battery' ? '<path class="site__mark" d="M0 -6L6 0L0 6L-6 0Z"/>' : '<circle class="site__mark" r="4.5"/>';
-    // The radar is west of the city, so its name goes on the far side from the city blocks
-    const label = s.kind === 'radar' ? 'x="-9" y="3" text-anchor="end"' : 'x="9" y="3"';
-    return `<g class="site" transform="translate(${f(px)} ${f(py)})">${mark}<text class="site__ja" ${label}>${s.ja}</text></g>`;
+  return SIM.BATTERIES.map(b => {
+    const [px, py] = view.px(b.x, b.y);
+    return `<g class="site" data-battery="${b.id}" data-state="ready" transform="translate(${f(px)} ${f(py)})">`
+      + `<circle class="site__range" r="${f(SIM.RANGE_KM * view.ppk)}"/>`
+      + `<path class="site__mark" d="M0 -6L6 0L0 6L-6 0Z"/><text class="site__ja" x="9" y="3">${BATTERY_NAMES[b.id]}</text></g>`;
   }).join('');
 }
 
@@ -151,7 +148,7 @@ function drawMaps() {
   // The live layers: trails and the route under, contacts on top. Clipped
   // to the scope so a contact outside 24.5 km is only on the wide map.
   scopeLive.innerHTML = `<defs><clipPath id="live-clip"><circle cx="${scope.half}" cy="${scope.half}" r="${r}"/></clipPath></defs>`
-    + `<g clip-path="url(#live-clip)"><g id="trails"></g><line class="route" id="route" data-on="false"/><g id="contacts"></g></g>`;
+    + `<g clip-path="url(#live-clip)"><g id="trails"></g><line class="route" id="route" data-on="false"/><g id="shots"></g><g id="contacts"></g><g id="bursts"></g></g>`;
   wideLive.innerHTML = '<g id="wide-dots"></g>';
 }
 
@@ -163,7 +160,6 @@ let sim = null;
 let shown = new Map();       // contact id -> the elements that show it
 let gone = new Set();        // ids already faded out (the sim still lists them, so they must not be drawn again)
 let selected = null;         // id of the selected contact
-let nextTrail = 0;
 
 const SIZE = { SCOUT: 3.5, STANDARD: 5, HEAVY: 7 };   // dot radius by type, in scope pixels
 const FADE = 2.5;            // seconds a finished contact stays before it is removed
@@ -172,9 +168,14 @@ const list = document.querySelector('#list');
 const empty = document.querySelector('#empty');
 const ticker = document.querySelector('#ticker');
 const clockEl = document.querySelector('#clock');
+const logEl = document.querySelector('#log');
+const popBox = document.querySelector('.pop');
+const popEl = document.querySelector('#pop');
+const engageBtn = document.querySelector('#engage');
+const sites$ = {};           // battery id -> its group on the scope
 
 const bearingOf = c => (Math.atan2(c.x, c.y) * 180 / Math.PI + 360) % 360;
-const STATE = { inbound: ['接近中', 'INBOUND'], impact: ['着弾', 'IMPACT'] };
+const STATE = { inbound: ['接近中', 'INBOUND'], impact: ['着弾', 'IMPACT'], destroyed: ['撃破', 'DESTROYED'] };
 const mmss = t => `T+${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 function begin() {
@@ -185,7 +186,10 @@ function begin() {
   shown.clear();
   gone.clear();
   selected = null;
-  nextTrail = 0;
+  for (const el of shotEls.values()) el.remove();
+  shotEls.clear();
+  document.querySelector('#bursts').replaceChildren();
+  logEl.replaceChildren();
   say('idle', '待機中', 'STANDBY');
   refresh(true);
 }
@@ -219,6 +223,8 @@ function show(c) {
     pts: [],
     nextPt: 0,
     endAt: null,
+    hull: 100,
+    label: g.querySelector('.contact__label'),
     remove() { trail.remove(); g.remove(); wideDot.remove(); li.remove(); },
   };
   shown.set(c.id, v);
@@ -241,6 +247,14 @@ function place() {
     }
     v.g.dataset.scope = String(c.onScope);
 
+    // A damaged contact shows what is left of its hull next to its name
+    const hull = Math.round(100 * c.hp / c.maxHp);
+    if (hull !== v.hull || v.state !== c.state) {
+      v.state = c.state;
+      v.hull = hull;
+      v.label.textContent = hull < 100 && c.state === 'inbound' ? `${c.id} ${hull}%` : c.id;
+    }
+
     // A short trail of where it has been, one point every half second
     if (c.state === 'inbound' && sim.time >= v.nextPt) {
       v.pts.push([px, py]);
@@ -258,6 +272,9 @@ function place() {
     }
   }
 
+  for (const b of sim.batteries) sites$[b.id].dataset.state = sim.stateOf(b);
+  drawShots();
+
   // The route: a dashed line from the selected contact to the city
   const route = document.querySelector('#route');
   const sel = selected && sim.contacts.find(c => c.id === selected);
@@ -272,7 +289,7 @@ function place() {
 }
 
 
-/* ---------- THE LIST, THE SELECTED PANEL AND THE TICKER ----------
+/* ---------- THE LIST, THE PANELS AND THE BATTERIES ----------
    Redrawn ten times a second rather than every frame: rebuilding what a person
    is trying to click in the middle of a press loses the click. The rows are made
    once and only their text changes. */
@@ -280,9 +297,16 @@ const els = {
   target: document.querySelector('#target'),
   id: document.querySelector('#t-id'), kind: document.querySelector('#t-kind'),
   bearing: document.querySelector('#t-bearing'), range: document.querySelector('#t-range'),
-  speed: document.querySelector('#t-speed'), eta: document.querySelector('#t-eta'),
+  eta: document.querySelector('#t-eta'), hull: document.querySelector('#t-hull'),
+  hit: document.querySelector('#t-hit'), battery: document.querySelector('#t-battery'),
   state: document.querySelector('#t-state'),
 };
+const bats = {};             // battery id -> { pips, state } elements in the BATTERIES box
+for (const li of document.querySelectorAll('#bats li')) {
+  const pips = li.querySelector('.bat__pips');
+  pips.innerHTML = '<i></i>'.repeat(SIM.MAGAZINE);
+  bats[li.dataset.battery] = { li, pips: [...pips.children], state: li.querySelector('.bat__state') };
+}
 
 function refresh(force) {
   const inbound = sim.inbound();
@@ -293,6 +317,7 @@ function refresh(force) {
 
   stage.dataset.state = inbound.length ? 'running' : 'idle';
   clockEl.textContent = mmss(sim.time);
+  popEl.textContent = sim.population.toLocaleString('en-US');
 
   // Rows: soonest first, finished contacts below. Only move a row that is out of place.
   const order = [...shown.values()].sort((a, b) => {
@@ -307,37 +332,123 @@ function refresh(force) {
   }
   empty.hidden = order.length > 0;
 
-  // The selected panel
+  // The selected panel, including what a shot would do: the hit chance and the
+  // battery that would fire. With none able to fire it says so, so a refused
+  // press is never a surprise.
   const c = selected && sim.contacts.find(x => x.id === selected);
   els.target.dataset.empty = String(!c);
+  engageBtn.disabled = !(c && c.state === 'inbound');
   if (c) {
+    const aim = sim.aim(c);
     els.id.textContent = c.id;
     els.kind.textContent = c.kind;
     els.bearing.textContent = `${String(Math.round(bearingOf(c)) % 360).padStart(3, '0')}°`;
     els.range.textContent = `${sim.dist(c).toFixed(1)} KM`;
-    els.speed.textContent = `${c.speed.toFixed(1)} KM/S`;
     els.eta.textContent = `${sim.eta(c).toFixed(1)} S`;
+    els.hull.textContent = `${Math.round(100 * c.hp / c.maxHp)}%`;
+    els.hit.textContent = c.state !== 'inbound' ? '-' : aim.inRange.length ? `${Math.round(aim.chance * 100)}%` : 'OUT OF RANGE';
+    els.battery.textContent = c.state !== 'inbound' ? '-' : !aim.inRange.length ? '-' : aim.battery ? SIDE[aim.battery.id] : 'CYCLING';
     els.state.textContent = STATE[c.state][1];
   } else {
-    for (const k of ['id', 'kind', 'bearing', 'range', 'speed', 'eta', 'state']) els[k].textContent = '-';
+    for (const k of ['id', 'kind', 'bearing', 'range', 'eta', 'hull', 'hit', 'battery', 'state']) els[k].textContent = '-';
+  }
+
+  // The batteries: a pip for each round left, and what it is doing
+  for (const b of sim.batteries) {
+    const el = bats[b.id], state = sim.stateOf(b);
+    el.li.dataset.state = state;
+    el.pips.forEach((pip, i) => { pip.dataset.on = String(i < b.rounds); });
+    el.state.textContent = state === 'reloading' ? `RELOAD ${b.reload.toFixed(0)}S` : state === 'cooling' ? 'COOLING' : 'READY';
   }
 }
 
-// One line at the bottom: the latest thing that happened, in the color of its level
-function say(level, ja, en) {
-  ticker.dataset.level = level;
-  ticker.innerHTML = `<span class="ticker__time">${sim ? mmss(sim.time) : 'T+00:00'}</span> <span class="ticker__ja" lang="ja">${ja}</span> <span class="ticker__en">${en}</span>`;
+
+/* ---------- SHOTS AND BURSTS ----------
+   A round in the air is a short tracer flying from its battery toward where the
+   contact is now, so it arrives when the sim says it lands. A burst is a ring
+   where a round landed. Both are for show: the sim has already decided. */
+const SVG = 'http://www.w3.org/2000/svg';
+const shotEls = new Map();    // shot id -> its line
+
+function drawShots() {
+  const layer = document.querySelector('#shots');
+  const live = new Set();
+  for (const s of sim.shots) {
+    live.add(s.id);
+    let el = shotEls.get(s.id);
+    if (!el) {
+      el = document.createElementNS(SVG, 'line');
+      el.setAttribute('class', 'shot');
+      layer.append(el);
+      shotEls.set(s.id, el);
+    }
+    const b = sim.batteries.find(x => x.id === s.battery);
+    const t = sim.contacts.find(x => x.id === s.target);
+    const k = Math.min(1, (sim.time - s.t0) / (s.t1 - s.t0));
+    const k0 = Math.max(0, k - 0.2);
+    const at = n => scope.px(b.x + (t.x - b.x) * n, b.y + (t.y - b.y) * n);
+    const [x1, y1] = at(k0), [x2, y2] = at(k);
+    el.setAttribute('x1', f(x1)); el.setAttribute('y1', f(y1));
+    el.setAttribute('x2', f(x2)); el.setAttribute('y2', f(y2));
+  }
+  for (const [id, el] of shotEls) {
+    if (!live.has(id)) { el.remove(); shotEls.delete(id); }
+  }
 }
 
+function burst(kind, x, y) {
+  const [px, py] = scope.px(x, y);
+  const ring = document.createElementNS(SVG, 'circle');
+  ring.setAttribute('class', `burst burst--${kind}`);
+  ring.setAttribute('cx', f(px));
+  ring.setAttribute('cy', f(py));
+  ring.setAttribute('r', kind === 'kill' ? 14 : 9);
+  document.querySelector('#bursts').append(ring);
+  setTimeout(() => ring.remove(), 700);
+}
+
+
+/* ---------- THE TICKER AND THE LOG ----------
+   Every event goes to both: the ticker shows the latest in its level's color,
+   the log keeps the last few. Levels: teal information, amber alert, red breach. */
+const LOG_LINES = 7;
+
+function say(level, ja, en) {
+  const time = sim ? mmss(sim.time) : 'T+00:00';
+  ticker.dataset.level = level;
+  ticker.innerHTML = `<span class="ticker__time">${time}</span> <span class="ticker__ja" lang="ja">${ja}</span> <span class="ticker__en">${en}</span>`;
+
+  const li = document.createElement('li');
+  li.dataset.level = level;
+  li.innerHTML = `<time>${time}</time> <span class="log__ja" lang="ja">${ja}</span> <span class="log__en">${en}</span>`;
+  logEl.prepend(li);
+  while (logEl.children.length > LOG_LINES) logEl.lastChild.remove();
+}
+
+const REFUSED = { target: ['交戦不能', 'NO TARGET'], range: ['射程外', 'OUT OF RANGE'], busy: ['装填中', 'BATTERIES CYCLING'] };
 const WORDS = {
-  spawn: ['info', '未確認目標接近', 'UNIDENTIFIED CONTACT'],
-  scope: ['alert', '防衛圏侵入', 'ENTERS SCOPE'],
-  impact: ['breach', '着弾', 'IMPACT'],
+  spawn:     e => ['info',   '未確認目標接近', `${e.id} UNIDENTIFIED CONTACT`],
+  scope:     e => ['alert',  '防衛圏侵入',     `${e.id} ENTERS SCOPE`],
+  fire:      e => ['info',   '砲撃',           `${SIDE[e.battery]} FIRES AT ${e.id}, ${Math.round(e.chance * 100)}%`],
+  hit:       e => ['info',   '命中',           `${e.id} HIT, HULL ${Math.round(100 * e.hp / e.maxHp)}%`],
+  miss:      e => ['alert',  '外れ',           `${e.id} MISSED`],
+  wasted:    e => ['alert',  '無効',           `${e.id} ROUND WASTED`],
+  destroyed: e => ['info',   '撃破',           `${e.id} DESTROYED`],
+  impact:    e => ['breach', '着弾',           `${e.id} IMPACT, POPULATION -${e.damage.toLocaleString('en-US')}`],
+  refused:   e => ['alert',  ...REFUSED[e.reason].map((w, i) => i ? `${w}${e.id ? ' ' + e.id : ''}` : w)],
 };
+
 function report(events) {
   for (const e of events) {
-    const [level, ja, en] = WORDS[e.type];
-    say(level, ja, `${e.id} ${en}`);
+    const [level, ja, en] = WORDS[e.type](e);
+    say(level, ja, en);
+    if (e.type === 'hit') burst('hit', e.x, e.y);
+    if (e.type === 'miss') burst('miss', e.x, e.y);
+    if (e.type === 'destroyed') burst('kill', e.x, e.y);
+    if (e.type === 'impact') {
+      popBox.dataset.hit = 'true';
+      setTimeout(() => { popBox.dataset.hit = 'false'; }, 1200);
+    }
   }
 }
 
@@ -374,6 +485,16 @@ function tick(now) {
 /* ---------- CONTROLS ---------- */
 const bar = document.querySelector('.bar');
 
+// The player's one action: fire at the selected contact. The sim decides what
+// happens, and says why when nothing does.
+function engage() {
+  sim.engage(selected);
+  report(sim.takeEvents());
+  place();
+  refresh();
+}
+engageBtn.addEventListener('click', engage);
+
 bar.addEventListener('submit', e => {
   e.preventDefault();
   const c = sim.spawnRandom(document.querySelector('#pick-kind').value);
@@ -393,9 +514,17 @@ document.addEventListener('click', e => {
   if (hit) select(hit.dataset.id);
 });
 
-// Arrow keys step through the list, soonest first (not while a menu is open)
+// Space or E fires; the arrow keys step through the list, soonest first. Neither
+// applies while a menu is open. Space is taken from buttons too (Enter still
+// presses them), so firing never also presses whatever happens to have focus.
+const typing = e => e.target.closest?.('select, input, textarea');
 document.addEventListener('keydown', e => {
-  if (e.target.closest?.('select, input, textarea')) return;
+  if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === ' ' || e.key.toLowerCase() === 'e') {
+    e.preventDefault();
+    if (!e.repeat) engage();
+    return;
+  }
   const dir = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
   if (!dir) return;
   const ids = sim.inbound().map(c => c.id);
@@ -403,6 +532,9 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
   const i = ids.indexOf(selected);
   select(ids[(i + dir + ids.length) % ids.length]);
+});
+document.addEventListener('keyup', e => {
+  if (e.key === ' ' && !typing(e)) e.preventDefault();   // a button would otherwise be pressed on key release
 });
 
 
@@ -425,6 +557,7 @@ fit();
 
 /* ---------- START UP ---------- */
 drawMaps();
+for (const el of document.querySelectorAll('.site')) sites$[el.dataset.battery] = el;
 begin();
 bar.hidden = false;
 requestAnimationFrame(tick);

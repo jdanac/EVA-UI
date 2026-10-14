@@ -169,6 +169,21 @@ body {
 .panel__sep { color: var(--amber-dim); }
 .panel--scope .panel__tag { left: 0; border-left: 2px solid var(--amber); }
 
+/* Small readouts in the corners of the scope, where the square leaves room
+   outside the circle */
+.panel__corner {
+  position: absolute;
+  top: 8px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  color: var(--amber);
+}
+.panel__corner--tl { left: 10px; }
+.panel__corner--tr { right: 10px; text-align: right; }
+
 
 /* ---------- 4. MAP LAYERS ----------
    Classes written by script.js. The glow is a drop-shadow on a whole group,
@@ -228,8 +243,14 @@ body {
 .city .city__ground { fill: var(--bg); stroke: var(--bg); stroke-width: 3px; }
 .city .city__ring { fill: none; stroke: var(--amber); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.8; }
 
-/* A site: a hollow diamond (battery) or circle (radar) with its name */
+/* A battery: a diamond with its name, inside a faint ring showing its reach.
+   Hollow when it can fire, filled for the moment after a shot (cooling), and
+   dashed amber while it reloads. */
 .site__mark { fill: var(--bg); stroke: var(--cyan); stroke-width: 1.8; }
+.site__range { fill: none; stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 2 5; opacity: 0.22; }
+.site[data-state="cooling"] .site__mark { fill: var(--cyan); }
+.site[data-state="reloading"] .site__mark { stroke: var(--warn); stroke-dasharray: 3 2; }
+.site[data-state="reloading"] .site__ja { fill: var(--warn); }
 .site__ja {
   fill: var(--cyan);
   font-family: var(--font-jp);
@@ -290,9 +311,34 @@ body {
 .contact[data-state="impact"] .contact__dot { fill: var(--ink); }
 .contact[data-state="impact"] .contact__ring { animation-duration: 0.5s; stroke-width: 3; }
 
+/* Destroyed: teal and still, so it reads as dealt with */
+.contact[data-state="destroyed"] .contact__dot { fill: var(--cyan); }
+.contact[data-state="destroyed"] .contact__ring { animation: none; opacity: 0; }
+.contact[data-state="destroyed"] .contact__label { fill: var(--cyan); }
+.contact[data-state="destroyed"] { opacity: 0.8; }
+
 .wide__contact { fill: var(--alert); }
 .wide__contact[data-selected="true"] { stroke: var(--ink); stroke-width: 1.5; }
 .wide__contact[data-state="impact"] { fill: var(--ink); }
+.wide__contact[data-state="destroyed"] { fill: var(--cyan); }
+
+/* A round in the air, and the ring where one lands: amber for a hit, teal for a
+   miss, white and larger for a kill */
+.shot { stroke: var(--warn); stroke-width: 2.2; stroke-linecap: round; }
+.burst {
+  fill: none;
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: burst 0.6s ease-out forwards;
+}
+.burst--hit  { stroke: var(--warn); }
+.burst--miss { stroke: var(--cyan); }
+.burst--kill { stroke: var(--ink); stroke-width: 3; }
+@keyframes burst {
+  from { transform: scale(0.4); opacity: 1; }
+  to   { transform: scale(2.2); opacity: 0; }
+}
 
 @keyframes pulse {
   0%   { transform: scale(0.5); opacity: 0.9; }
@@ -309,7 +355,7 @@ body {
   flex-direction: column;
   min-width: 0;
 }
-.cell--info     { left: 20px;  top: 332px; width: 300px; height: 300px; }
+.cell--bat      { left: 20px;  top: 332px; width: 300px; height: 300px; }
 .cell--contacts { left: 956px; top: 20px;  width: 304px; height: 300px; }
 .cell--target   { left: 956px; top: 332px; width: 304px; height: 300px; }
 
@@ -355,8 +401,70 @@ body {
 }
 .rows dt { color: var(--amber); }
 .rows dd { margin: 0; text-align: right; }
-.cell--info .rows { align-content: space-between; }
-.rows__credit { grid-column: 1 / -1; font-size: 9px; color: var(--amber-dim); }
+
+/* Batteries: name, a pip for each round left, and what it is doing */
+.cell--bat .cell__body { padding: 8px 10px; display: flex; flex-direction: column; }
+.bats { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.bats li {
+  --st: var(--cyan);
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  color: var(--st);
+}
+.bats li[data-state="cooling"]   { --st: var(--cyan); }
+.bats li[data-state="reloading"] { --st: var(--warn); }
+.bat__name { font-family: var(--font-label); font-weight: 700; letter-spacing: 0.18em; }
+.bat__pips { display: flex; gap: 4px; }
+.bat__pips i {
+  width: 14px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--st);
+}
+.bat__pips i[data-on="true"] { background: var(--st); }
+.bat__state { min-width: 74px; text-align: right; font-size: 11px; }
+
+/* The event log under them: newest first, each line in the color of its level */
+.log__head {
+  margin: 10px 0 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--amber-dim);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--amber);
+}
+.log__head [lang="ja"] { font-family: var(--font-jp); font-weight: 800; font-size: 13px; letter-spacing: 0.04em; margin-right: 4px; }
+.log {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* Older lines fade out at the bottom instead of being cut off mid-line */
+  -webkit-mask-image: linear-gradient(#000 70%, transparent);
+  mask-image: linear-gradient(#000 70%, transparent);
+}
+.log li {
+  --st: var(--cyan);
+  flex: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--st);
+}
+.log li[data-level="alert"]  { --st: var(--warn); }
+.log li[data-level="breach"] { --st: var(--alert); }
+.log time { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; opacity: 0.8; }
+.log__ja { font-family: var(--font-jp); font-weight: 800; font-size: 11px; }
+.log__en { font-family: var(--font-label); font-weight: 500; font-size: 10px; letter-spacing: 0.1em; }
+.credit { margin: 4px 0 0; font-size: 8px; color: var(--amber-dim); }
 
 /* Contacts: one boxed row each. Inbound is amber; the selected one is inverted,
    like a tag; one that has hit the city is red and dim. */
@@ -415,6 +523,8 @@ body {
 .target { display: flex; flex-direction: column; justify-content: space-between; }
 .target[data-empty="true"] .rows dd { color: var(--amber-dim); }
 .btn--engage { height: 44px; }
+.btn--engage:not(:disabled) { border-color: var(--warn); color: var(--warn); }
+.btn--engage:hover:not(:disabled) { background: var(--warn); color: var(--bg); }
 .btn--engage [lang="ja"] { font-family: var(--font-jp); font-weight: 800; letter-spacing: 0.1em; margin-right: 6px; }
 
 
@@ -429,7 +539,7 @@ body {
   width: 1240px;
   height: 56px;
   display: grid;
-  grid-template-columns: 220px 120px 120px 1fr 240px;
+  grid-template-columns: 190px 110px 110px 1fr 240px;
   gap: 8px;
   align-items: stretch;
 }
@@ -518,11 +628,13 @@ body {
 .pop__label { font-family: var(--font-label); font-weight: 700; font-size: 11px; letter-spacing: 0.22em; color: var(--amber); }
 .pop__label [lang="ja"] { font-family: var(--font-jp); font-weight: 800; font-size: 13px; letter-spacing: 0.04em; margin-right: 4px; }
 .pop__num { font-family: var(--font-mono); font-size: 24px; line-height: 1.1; letter-spacing: 0.06em; }
+.pop[data-hit="true"] { border-color: var(--alert); }
+.pop[data-hit="true"] .pop__num { color: var(--alert); }
 
 /* Motion is switched off for people who ask: the sweep stops and the rings
    show as steady outlines. The contacts still move, which is the game. */
 @media (prefers-reduced-motion: reduce) {
-  .sweep, .contact__ring { animation: none; }
+  .sweep, .contact__ring, .burst { animation: none; }
   .contact__ring { opacity: 0.6; transform: scale(1.4); }
 }
 
