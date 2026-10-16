@@ -94,7 +94,7 @@ All of this stays; most of it is the stage the commands will play on.
   knows nothing about longitude, latitude or pixels.
 - `sim.js`: the rules with no DOM, fixed step, and a seeded random generator in
   two separate streams (spawns and hit rolls, so firing never changes where the
-  next contact comes from, and `?seed=N` replays comparably). 29 checks in
+  next contact comes from, and `?seed=N` replays comparably). 33 checks in
   `sim.test.mjs` (`node g-1/sim.test.mjs`).
 - The run: a scripted, escalating schedule of 23 contacts (`SIM.schedule(seed)`,
   bearings from the seed). The page plays it from the start, and the arena
@@ -106,17 +106,20 @@ All of this stays; most of it is the stage the commands will play on.
   by time to impact, a selected-contact panel, a battery readout, an event log
   and a ticker. Tokyo-3 with its Geofront is drawn at the center.
 - Contacts: STANDARD and HEAVY flying a straight line at the city, and RAIDER
-  flying at a battery, from a bearing in the sea sector (100 to 230 degrees),
-  spawning 40 km out and reaching the scope at 24.5 km. (SCOUT is still in the
-  sim's table but not in the run.)
-- Three batteries (north, south, east) under fire orders, drawing on one shared
-  ammunition pool, with rounds that have a flight time and a hit chance that
-  falls with distance (85% close to 20% at the edge of the range), hull
-  damage, destroyed and impact states, population loss and Geofront integrity.
+  flying at a site, from a bearing in the sea sector (100 to 230 degrees),
+  spawning 40 km out and reaching the scope at 24.5 km. All 25% slower than the
+  first build (STANDARD 0.6, HEAVY 0.375, RAIDER 1.05 km/s), after the first
+  playtest found them too quick. (SCOUT is still in the sim's table but not in
+  the run.)
+- Six sites under fire orders: three GUNs and three AA (see "Weapons"), each
+  weapon with its own ammunition pool. Rounds are aimed at where the contact
+  will be and fly a straight line there; they have a flight time and a hit
+  chance that falls with distance. Hull damage (less the contact's armor),
+  destroyed and impact states, population loss and Geofront integrity.
 - **Milestone A is built** (2026-10-14): the rules in "Milestone A in detail",
-  with the screen for them (order buttons and keys 1 to 3, H, Space to pause,
-  ammo and Geofront readouts, order lines on the scope, the end banners). See
-  "Milestone A: first arena results".
+  with the screen for them (order buttons and keys 1 to 6, H, Space to pause,
+  two ammo readouts and the Geofront, order lines on the scope, the end
+  banners). See "Milestone A: first arena results" and "Weapons".
 - **Known gaps:** no OpenStreetMap detail on the scope (Overpass was down on
   2026-10-14; retry with `node tools/geo.mjs detail sagami-detail 138.77 35.013
   139.31 35.453 --out g-1/data --roads "motorway|trunk|primary|secondary"
@@ -209,11 +212,11 @@ sites, firing arcs or different ranges).
 - `engage()` goes; the sim gains `assign(battery, contactId)` and
   `hold(battery)`.
 
-**C3 ammunition.** A shared pool of 36 rounds, with 1 round back every 5 s, up
-to 36 (tuned in the arena from a first guess of 30 and 6 s, at which every bot
-was breached). No magazine or reload per battery; the 1.5 s cooldown stays. The hit
-chance falls more steeply at long range (draft: 85% at 4 km or closer to 20% at
-12 km).
+**C3 ammunition.** A pool of 36 shells for the guns, with 1 back every 5 s
+(tuned in the arena from a first guess of 30 and 6 s, at which every bot was
+breached). No magazine or reload per battery; the 1.5 s cooldown stays. The hit
+chance falls more steeply at long range (85% at 4 km or closer to 20% at
+12 km). The AA has a pool of its own (see "Weapons").
 
 **C2 threat types for the milestone.** SCOUT is dropped for now; three kinds:
 - STANDARD and HEAVY as today, flying at the city.
@@ -239,8 +242,8 @@ while you wait in game time.
   hit rolls.
 - Bots decide once a game second, not every step, so a gap measures judgment,
   not reaction speed.
-- Bots see only what the screen shows: positions, kinds, hulls, ETAs, battery
-  states and the pool. They never see a round's pre-rolled hit (and later never
+- Bots see only what the screen shows: kinds, hulls, armor, speed, ETAs, hit
+  chances per site, site states and the pools. They never see a round's pre-rolled hit (and later never
   a hidden type).
 - A breached run scores the population at the moment of breach; the breach rate
   is reported separately.
@@ -250,13 +253,46 @@ while you wait in game time.
   human test is the guard.
 
 **The screen for the milestone.** The selected-contact panel gets an assign
-button per battery (keys 1 to 3) and HOLD (H holds all). The battery box shows
+button per site (keys 1 to 6) and HOLD (H holds all). The battery box shows
 each battery's target and its retarget or silenced timer. The pool and the
 Geofront integrity get readouts. ENGAGE and Space/E go; Space is pause, with a
 PAUSED state on the screen. The `sim.test.mjs` checks that use `engage()` are
 rewritten.
 
-### Milestone A: first arena results
+### Weapons (added 2026-10-15)
+
+The first playtest said contacts were too fast and asked for more sites and a
+second kind of weapon. Contacts are 25% slower, and there are now six sites: the
+three guns and three AA further out. Two weapons, two answers:
+
+| | GUN (artillery) | AA |
+|---|---|---|
+| range | 12 km | 6 km |
+| cooldown | 1.5 s | 0.4 s (a stream of short bursts) |
+| damage per hit | 50 | 8 |
+| round speed | 6 km/s | 15 km/s |
+| hit chance | 85% to 4 km, 20% at 12 km, times 1 up to 0.6 km/s falling to 0.5 at 1.2 km/s | 80% to 3 km, 50% at 6 km, no speed penalty |
+| ammunition | shells: 36, 1 back per 5 s | rounds: 150, 1 back per 0.25 s |
+
+Contacts have **armor**, subtracted from each hit (at least 1): HEAVY 10, the
+rest 0. So a HEAVY (hull 270) needs guns, a RAIDER is a job for the AA (a gun
+shell rarely catches something that fast), and a STANDARD can go either way,
+which is where allocation matters.
+
+AA sites at about (7.0, -4.9), (1.6, -8.4) and (-5.4, -7.0) km from the city,
+each a triangle on the scope (green; guns are teal diamonds). The positions are
+a first guess, placed on land by eye. Any site can be a raider's target.
+
+**Leading shots.** A round is aimed at the point where it will meet the contact
+(the intercept of the round's speed and the contact's course), flies a straight
+line there, and lands at the time the sim says. The first version drew the
+tracer toward the contact's current position every frame, so it swept sideways
+rather than flying ahead. The gun's penalty against fast contacts stays as a
+rule ("it evades"), not physics. A miss lands a few hundred meters beside the
+contact. AA tracers and bursts are shorter and are kept out of the log (a site
+fires two or three times a second).
+
+### Milestone A: first arena results (before the weapons)
 
 300 seeds of the arena's 23-contact schedule, bots deciding once a second:
 
@@ -286,6 +322,39 @@ habit deep. What the gap is made of, from switching parts of PRIORITY off:
 
 The ablation numbers came from one-off edits to the bot outside the repo; the
 table above is what `node g-1/arena.mjs` prints.
+
+### Arena results with six sites and two weapons
+
+Same 300 seeds, contacts 25% slower, heavy hull raised from 200 to 270 and AA
+damage set at 8 during tuning (with the spread-out sites everything above these
+was too easy: PATIENT reached 68% beside PRIORITY's 77%).
+
+| bot | population left | breached |
+|---|---|---|
+| SPAM | 3.3% | 100% |
+| STICKY | 3.7% | 100% |
+| PATIENT (best single habit) | 39.6% | 24.0% |
+| RANDOM | 6.4% | 100% |
+| PRIORITY (weapon-aware) | 53.5% | 10.3% |
+| GUNS-ONLY (PRIORITY, no AA) | 7.8% | 84.0% |
+| AA-ONLY (PRIORITY, no guns) | 4.9% | 100% |
+| FLAT (PRIORITY, all contacts ranked equal) | 60.5% | 7.7% |
+
+- PRIORITY is 35% ahead of PATIENT: still more than one habit deep.
+- **Neither weapon is decoration:** without the AA PRIORITY loses 86% of its
+  population, without the guns 91%.
+- **Threat ranking still does not pay:** FLAT (just the soonest contact) beats
+  the ranked bot by 13%. Armor and speed made the weapons matter, but "which
+  contact first" is still answered by ETA. The decision C2 is meant to create is
+  not there yet; it needs something the soonest contact does not tell you (a
+  contact that is a bigger danger than its ETA says, or one that is not what it
+  seems, see C6).
+- The bots decide every second and the human has a pause, so a person can match
+  them; the unknown is whether six sites make the orders too many. A standing
+  order per site (for example fire only above a hit chance) is the likely
+  remedy, and is not built.
+- The ablation bots are in the repo this time: GUNS-ONLY, AA-ONLY and FLAT are
+  in `node g-1/arena.mjs`.
 
 The human test (five runs, four questions) is the next check, before C4.
 

@@ -10,10 +10,12 @@
    A bearing is degrees clockwise from north, as on a compass.
 
    Milestone A of SPEC.md: the player gives fire orders (a battery is on HOLD or
-   ASSIGNED to a contact, and fires by itself when it can), rounds come from one
-   shared pool, a RAIDER goes for a battery instead of the city, and the
-   Geofront has an integrity that surface impacts wear down. At zero it is
-   breached and the run is over.
+   ASSIGNED to a contact, and fires by itself when it can), a RAIDER goes for a
+   battery instead of the city, and the Geofront has an integrity that surface
+   impacts wear down. At zero it is breached and the run is over. There are two
+   weapons: GUNs (long range, slow heavy shells) and AA (short range, quick
+   light bursts), each with its own ammunition pool. Rounds are aimed at where
+   the contact will be, not where it is.
    ========================================================= */
 
 const SIM = (() => {
@@ -31,34 +33,51 @@ const SIM = (() => {
   // integrity what it costs the Geofront. A raider flies at a battery instead.
   // SCOUT sits out milestone A (SPEC.md) but is kept so it can come back.
   const KINDS = {
-    SCOUT:    { ja: '小型', speed: 1.2, hp: 50,  damage: 40000,  integrity: 5 },
-    STANDARD: { ja: '標準', speed: 0.8, hp: 100, damage: 120000, integrity: 15 },
-    HEAVY:    { ja: '大型', speed: 0.5, hp: 200, damage: 300000, integrity: 40 },
-    RAIDER:   { ja: '襲撃', speed: 1.4, hp: 50,  damage: 0,      integrity: 0, raider: true },
+    SCOUT:    { ja: '小型', speed: 0.9,   hp: 50,  armor: 0,  damage: 40000,  integrity: 5 },
+    STANDARD: { ja: '標準', speed: 0.6,   hp: 100, armor: 0,  damage: 120000, integrity: 15 },
+    HEAVY:    { ja: '大型', speed: 0.375, hp: 270, armor: 10, damage: 300000, integrity: 40 },
+    RAIDER:   { ja: '襲撃', speed: 1.05,  hp: 50,  armor: 0,  damage: 0,      integrity: 0, raider: true },
+  };
+  // A hit takes its weapon's damage minus the contact's armor (at least 1), so a
+  // light round is nearly useless against a HEAVY
+
+  // The two weapons. range in km; cooldown in seconds between one battery's
+  // shots; damage per hit; round speed in km/s; each type draws on a pool of
+  // its own (size, and seconds per round back). Placeholders, tuned in the arena.
+  const WEAPONS = {
+    GUN: { ja: '砲台', range: 12, cooldown: 1.5, damage: 50, roundKms: 6,  pool: 36,  resupply: 5 },
+    AA:  { ja: '対空', range: 6,  cooldown: 0.4, damage: 8,  roundKms: 15, pool: 150, resupply: 0.25 },
   };
 
-  // The three batteries, in km from the city: the positions of T-1's north,
-  // south and east batteries, converted once.
+  // The batteries, in km from the city. The three guns are the positions of
+  // T-1's north, south and east batteries, converted once. name is what the
+  // screen calls the site.
   const BATTERIES = [
-    { id: 'north', x: -4.55, y: 1.66 },
-    { id: 'south', x: 2.27,  y: -3.65 },
-    { id: 'east',  x: 4.55,  y: -2.32 },
+    { id: 'north', type: 'GUN', name: 'NORTH', ja: '北部砲台', x: -4.55, y: 1.66 },
+    { id: 'south', type: 'GUN', name: 'SOUTH', ja: '南部砲台', x: 2.27,  y: -3.65 },
+    { id: 'east',  type: 'GUN', name: 'EAST',  ja: '東部砲台', x: 4.55,  y: -2.32 },
+    // Three AA sites out on the approaches. Short range, so each guards its own
+    // patch of the approach, and each is also a raider's target.
+    { id: 'aa1', type: 'AA', name: 'AA-1', ja: '第一対空', x: 7.0,  y: -4.9 },
+    { id: 'aa2', type: 'AA', name: 'AA-2', ja: '第二対空', x: 1.6,  y: -8.4 },
+    { id: 'aa3', type: 'AA', name: 'AA-3', ja: '第三対空', x: -5.4, y: -7.0 },
   ];
-  const RANGE_KM = 12;        // how far a battery can fire
-  const COOLDOWN = 1.5;       // seconds between one battery's shots
   const RETARGET = 2.5;       // seconds from a new assignment to the first shot
   const SILENCED = 20;        // seconds a battery is out after a raider reaches it
-  const POOL = 36;            // rounds in the shared pool when full
-  const RESUPPLY = 5;         // seconds per round back into the pool
-  const SHOT_KMS = 6;         // how fast a round flies, so it lands after d / 6 seconds
-  const SHOT_DAMAGE = 50;     // hull points a hit takes off
 
-  // Chance a round hits: 85% at 4 km or closer, falling in a straight line to
-  // 20% at the edge of the range, so firing early wastes rounds. null beyond.
-  function hitChance(d) {
-    if (d > RANGE_KM) return null;
-    if (d <= 4) return 0.85;
-    return 0.85 - (0.85 - 0.20) * (d - 4) / (RANGE_KM - 4);
+  // Chance a round hits, from the distance to the contact when it is fired and
+  // that contact's speed; null beyond the weapon's range.
+  //   GUN  85% at 4 km or closer, falling in a straight line to 20% at its 12 km
+  //        range, so firing early wastes shells. Fast contacts dodge: the chance
+  //        is x1 up to 0.6 km/s, falling to x0.5 at 1.2 km/s. That is a rule,
+  //        not physics: the round is aimed correctly, the contact evades.
+  //   AA   80% to 3 km, falling to 50% at 6 km. Quick rounds, so no dodging.
+  function hitChance(weapon, d, speed = 0) {
+    const w = WEAPONS[weapon];
+    if (d > w.range) return null;
+    if (weapon === 'AA') return d <= 3 ? 0.80 : 0.80 - 0.30 * (d - 3) / (w.range - 3);
+    const base = d <= 4 ? 0.85 : 0.85 - 0.65 * (d - 4) / (w.range - 4);
+    return base * (1 - 0.5 * Math.min(1, Math.max(0, (speed - 0.6) / 0.6)));
   }
 
   // A small seeded random generator (mulberry32): the same seed gives the same
@@ -111,8 +130,9 @@ const SIM = (() => {
     let shotSerial = 0;
     let population = START_POPULATION;
     let integrity = INTEGRITY;
-    let ammo = POOL;
-    let supply = 0;           // seconds toward the next round back into the pool
+    // One pool of rounds per weapon type, and the seconds toward the next round back
+    const ammo = Object.fromEntries(Object.entries(WEAPONS).map(([k, w]) => [k, w.pool]));
+    const supply = Object.fromEntries(Object.keys(WEAPONS).map(k => [k, 0]));
     let breached = false;
 
     const find = id => contacts.find(c => c.id === id);
@@ -129,7 +149,7 @@ const SIM = (() => {
     //   hold      no target
     //   retarget  a new target, still swinging onto it
     //   range     on target, but the target is out of its reach
-    //   dry       on target and in reach, but the pool is empty
+    //   dry       on target and in reach, but its pool is empty
     //   cooling   just fired
     //   ready     will fire this step
     function stateOf(b) {
@@ -137,8 +157,8 @@ const SIM = (() => {
       if (!b.target) return 'hold';
       if (b.retarget > 0) return 'retarget';
       const c = find(b.target);
-      if (reach(b, c) > RANGE_KM) return 'range';
-      if (ammo < 1) return 'dry';
+      if (reach(b, c) > WEAPONS[b.type].range) return 'range';
+      if (ammo[b.type] < 1) return 'dry';
       if (b.cooldown > 0) return 'cooling';
       return 'ready';
     }
@@ -173,7 +193,18 @@ const SIM = (() => {
     const spawnRandom = kind => spawn(kind, SECTOR[0] + spawnStream() * (SECTOR[1] - SECTOR[0]));
 
     // The hit chance a battery would have on a contact right now, or null out of range
-    const chanceOf = (b, c) => hitChance(reach(b, c));
+    const chanceOf = (b, c) => hitChance(b.type, reach(b, c), c.speed);
+
+    // Where a round fired now meets a contact that keeps its course: the point
+    // P on its path, and the time t, such that the round (speed s from the
+    // battery) and the contact both reach P at t. Always solvable, since every
+    // round is faster than every contact: |r + v t| = s t is a quadratic in t.
+    function intercept(b, c, s) {
+      const rx = c.x - b.x, ry = c.y - b.y;
+      const rv = rx * c.vx + ry * c.vy, rr = rx * rx + ry * ry, vv = c.vx * c.vx + c.vy * c.vy;
+      const t = (rv + Math.sqrt(rv * rv + (s * s - vv) * rr)) / (s * s - vv);
+      return { t, x: c.x + c.vx * t, y: c.y + c.vy * t };
+    }
 
     // An order: put a battery on a contact. A new target starts the retarget
     // delay; giving the same target again changes nothing. Returns { ok: true }
@@ -204,17 +235,30 @@ const SIM = (() => {
       b.retarget = 0;
     }
 
+    // A round flies a straight line from the battery to where the contact will
+    // be (from -> to), arriving at t1. Whether it hits is rolled now and shown then.
     function fire(b, c) {
-      const d = reach(b, c);
-      const chance = hitChance(d);
-      ammo--;
-      b.cooldown = COOLDOWN;
+      const w = WEAPONS[b.type];
+      const chance = chanceOf(b, c);
+      const aim = intercept(b, c, w.roundKms);
+      ammo[b.type]--;
+      b.cooldown = w.cooldown;
       shots.push({
-        id: ++shotSerial, battery: b.id, target: c.id,
-        t0: time, t1: time + d / SHOT_KMS,
-        hit: hitRandom() < chance,       // rolled now, shown when the round lands
+        id: ++shotSerial, battery: b.id, weapon: b.type, target: c.id,
+        t0: time, t1: time + aim.t,
+        from: { x: b.x, y: b.y }, to: { x: aim.x, y: aim.y },
+        damage: w.damage,
+        hit: hitRandom() < chance,
       });
-      events.push({ type: 'fire', id: c.id, battery: b.id, chance, ammo, t: time });
+      events.push({ type: 'fire', id: c.id, battery: b.id, weapon: b.type, chance, ammo: ammo[b.type], t: time });
+    }
+
+    // Where a round that missed lands: a little to one side of the contact (the
+    // side and distance come from the shot's number, so no random draw is used)
+    function missPoint(s, c) {
+      const dx = s.to.x - s.from.x, dy = s.to.y - s.from.y, len = Math.hypot(dx, dy) || 1;
+      const side = s.id % 2 ? 1 : -1, off = 0.4 + 0.1 * (s.id % 5);
+      return { x: c.x - dy / len * side * off, y: c.y + dx / len * side * off };
     }
 
     function land(s) {
@@ -222,9 +266,10 @@ const SIM = (() => {
       if (c.state !== 'inbound') {
         events.push({ type: 'wasted', id: c.id, battery: s.battery, t: time });
       } else if (!s.hit) {
-        events.push({ type: 'miss', id: c.id, battery: s.battery, x: c.x, y: c.y, t: time });
+        const m = missPoint(s, c);
+        events.push({ type: 'miss', id: c.id, battery: s.battery, x: m.x, y: m.y, t: time });
       } else {
-        c.hp = Math.max(0, c.hp - SHOT_DAMAGE);
+        c.hp = Math.max(0, c.hp - Math.max(1, s.damage - KINDS[c.kind].armor));
         events.push({ type: 'hit', id: c.id, battery: s.battery, hp: c.hp, maxHp: c.maxHp, x: c.x, y: c.y, t: time });
         if (c.hp === 0) {
           c.state = 'destroyed';
@@ -268,10 +313,12 @@ const SIM = (() => {
         }
       }
 
-      supply += dt;
-      while (supply >= RESUPPLY) {
-        supply -= RESUPPLY;
-        if (ammo < POOL) ammo++;
+      for (const [type, w] of Object.entries(WEAPONS)) {
+        supply[type] += dt;
+        while (supply[type] >= w.resupply) {
+          supply[type] -= w.resupply;
+          if (ammo[type] < w.pool) ammo[type]++;
+        }
       }
 
       // Rounds that land this step do so before the contacts move, so a round
@@ -328,15 +375,15 @@ const SIM = (() => {
       get time() { return time; },
       get population() { return population; },
       get integrity() { return integrity; },
-      get ammo() { return ammo; },
+      get ammo() { return { ...ammo }; },
       get breached() { return breached; },
       inbound: () => contacts.filter(c => c.state === 'inbound').sort((a, b) => eta(a) - eta(b)),
     };
   }
 
   return {
-    create, schedule, hitChance, KINDS, BATTERIES, STEP, SPAWN_KM, SCOPE_KM, CITY_KM, RAID_KM, SECTOR,
-    RANGE_KM, COOLDOWN, RETARGET, SILENCED, POOL, RESUPPLY, SHOT_KMS, SHOT_DAMAGE,
+    create, schedule, hitChance, KINDS, WEAPONS, BATTERIES, STEP, SPAWN_KM, SCOPE_KM, CITY_KM, RAID_KM, SECTOR,
+    RETARGET, SILENCED,
     START_POPULATION, INTEGRITY,
   };
 })();

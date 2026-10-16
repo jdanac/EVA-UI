@@ -64,18 +64,16 @@
       <p class="banner banner--held"><span lang="ja">防衛成功</span> CITY HELD</p>
     </section>
 
-    <!-- Left, under the wide map: the three batteries (what each is on and what it
-         is doing), the shared ammunition pool, and a short log of what has
-         happened, newest first. The log is read aloud as it grows. -->
+    <!-- Left, under the wide map: the six sites (script.js lists them from the sim:
+         what each is on and what it is doing), the two ammunition pools (shells
+         for the guns, rounds for the AA), and a short log of what has happened,
+         newest first. The log is read aloud as it grows. -->
     <section class="cell cell--bat">
       <h2 class="cell__tag"><span lang="ja">砲台</span> BATTERIES</h2>
       <div class="cell__body">
-        <ul class="bats" id="bats">
-          <li data-battery="north" data-state="hold"><span class="bat__name">1 NORTH</span><span class="bat__target">-</span><span class="bat__state">HOLD</span></li>
-          <li data-battery="south" data-state="hold"><span class="bat__name">2 SOUTH</span><span class="bat__target">-</span><span class="bat__state">HOLD</span></li>
-          <li data-battery="east" data-state="hold"><span class="bat__name">3 EAST</span><span class="bat__target">-</span><span class="bat__state">HOLD</span></li>
-        </ul>
-        <p class="ammo" data-low="false"><span class="ammo__label"><span lang="ja">弾薬</span> AMMO</span><span class="ammo__bar"><i id="ammo-fill"></i></span><span class="ammo__num" id="ammo">36</span></p>
+        <ul class="bats" id="bats"></ul>
+        <p class="ammo" data-pool="GUN" data-low="false"><span class="ammo__label"><span lang="ja">砲弾</span> SHELLS</span><span class="ammo__bar"><i></i></span><span class="ammo__num">36</span></p>
+        <p class="ammo" data-pool="AA" data-low="false"><span class="ammo__label"><span lang="ja">対空</span> ROUNDS</span><span class="ammo__bar"><i></i></span><span class="ammo__num">150</span></p>
         <h3 class="log__head"><span lang="ja">事象記録</span> EVENT LOG</h3>
         <ol class="log" id="log" role="log" aria-label="Event log"></ol>
         <p class="credit">MAP DATA &copy; NATURAL EARTH</p>
@@ -94,15 +92,15 @@
 
     <!-- Right, bottom: the selected contact and the fire orders for it. Each
          battery button puts that battery on this contact, or takes it off if it
-         is already on it (keys 1 to 3), and shows the hit chance it would have
-         now. HOLD takes every battery off whatever it is on (key H). -->
+         is already on it (keys 1 to 6), and shows the hit chance it would have
+         now. script.js makes the six buttons from the sim's list of sites.
+         HOLD takes every battery off whatever it is on (key H). -->
     <section class="cell cell--target">
       <h2 class="cell__tag"><span lang="ja">選択</span> SELECTED</h2>
       <div class="cell__body target" id="target" data-empty="true">
         <dl class="rows">
           <dt>ID</dt>      <dd id="t-id">-</dd>
           <dt>TYPE</dt>    <dd id="t-kind">-</dd>
-          <dt>BEARING</dt> <dd id="t-bearing">-</dd>
           <dt>RANGE</dt>   <dd id="t-range">-</dd>
           <dt>ETA</dt>     <dd id="t-eta">-</dd>
           <dt>HULL</dt>    <dd id="t-hull">-</dd>
@@ -110,9 +108,6 @@
           <dt>STATUS</dt>  <dd id="t-state">-</dd>
         </dl>
         <div class="orders" role="group" aria-label="Fire orders for the selected contact">
-          <button class="order" type="button" data-battery="north" aria-pressed="false" disabled><span class="order__name">1 NORTH</span><span class="order__hit">-</span></button>
-          <button class="order" type="button" data-battery="south" aria-pressed="false" disabled><span class="order__name">2 SOUTH</span><span class="order__hit">-</span></button>
-          <button class="order" type="button" data-battery="east" aria-pressed="false" disabled><span class="order__name">3 EAST</span><span class="order__hit">-</span></button>
           <button class="order order--hold" type="button" id="hold-all"><span class="order__name" lang="ja">待機</span><span class="order__hit">H HOLD</span></button>
         </div>
       </div>

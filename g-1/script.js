@@ -25,10 +25,10 @@ const KM_PER_LON = 111.32 * Math.cos(CITY.at[1] * Math.PI / 180);
 const KM_PER_LAT = 110.57;
 const toKm = ([lon, lat]) => [(lon - CITY.at[0]) * KM_PER_LON, (lat - CITY.at[1]) * KM_PER_LAT];
 
-// The batteries are the sim's (it needs their positions); the names are only for drawing.
+// The batteries are the sim's (positions, weapon and names); this file only draws them.
 // T-1's west radar is left out: the sweep is Tokyo-3's own radar, at the center of the scope.
-const BATTERY_NAMES = { north: '北部砲台', south: '南部砲台', east: '東部砲台' };
-const SIDE = { north: 'NORTH', south: 'SOUTH', east: 'EAST' };
+const NAME = Object.fromEntries(SIM.BATTERIES.map(b => [b.id, b.name]));
+const TYPE = Object.fromEntries(SIM.BATTERIES.map(b => [b.id, b.type]));
 
 // A view maps km to pixels: a square panel with the city in the middle that
 // shows `radius` km out to its edge
@@ -119,14 +119,15 @@ function city(view) {
     + `<g class="glow"><path d="${blocks.join('')}"/></g></g>`;
 }
 
-// Each battery: a diamond (its color follows data-state, which place() sets) inside
-// a faint ring showing how far it reaches
+// Each site: a diamond for a gun, a triangle for AA (its color follows data-state,
+// which place() sets) inside a faint ring showing how far it reaches
 function sites(view) {
   return SIM.BATTERIES.map(b => {
     const [px, py] = view.px(b.x, b.y);
-    return `<g class="site" data-battery="${b.id}" data-state="ready" transform="translate(${f(px)} ${f(py)})">`
-      + `<circle class="site__range" r="${f(SIM.RANGE_KM * view.ppk)}"/>`
-      + `<path class="site__mark" d="M0 -6L6 0L0 6L-6 0Z"/><text class="site__ja" x="9" y="3">${BATTERY_NAMES[b.id]}</text></g>`;
+    const mark = b.type === 'AA' ? 'M0 -6L6.5 5L-6.5 5Z' : 'M0 -6L6 0L0 6L-6 0Z';
+    return `<g class="site" data-battery="${b.id}" data-type="${b.type}" data-state="hold" transform="translate(${f(px)} ${f(py)})">`
+      + `<circle class="site__range" r="${f(SIM.WEAPONS[b.type].range * view.ppk)}"/>`
+      + `<path class="site__mark" d="${mark}"/><text class="site__ja" x="9" y="3">${b.ja}</text></g>`;
   }).join('');
 }
 
@@ -181,15 +182,37 @@ const popBox = document.querySelector('.pop');
 const popEl = document.querySelector('#pop');
 const gfBox = document.querySelector('.gf');
 const gfEl = document.querySelector('#gf');
-const ammoBox = document.querySelector('.ammo');
-const ammoEl = document.querySelector('#ammo');
-const ammoFill = document.querySelector('#ammo-fill');
+const ammoRows = {};         // weapon type -> its pool bar in the BATTERIES box
+for (const box of document.querySelectorAll('.ammo')) {
+  ammoRows[box.dataset.pool] = { box, num: box.querySelector('.ammo__num'), fill: box.querySelector('i') };
+}
 const pauseBtn = document.querySelector('#pause');
+
+// The six rows in the BATTERIES box and the six order buttons come from the
+// sim's list of sites, so a site added there shows up here with no markup
+const holdBtn = document.querySelector('#hold-all');
+for (const [i, b] of SIM.BATTERIES.entries()) {
+  const li = document.createElement('li');
+  li.dataset.battery = b.id;
+  li.dataset.type = b.type;
+  li.dataset.state = 'hold';
+  li.innerHTML = `<span class="bat__name">${i + 1} ${b.name}</span><span class="bat__target">-</span><span class="bat__state">HOLD</span>`;
+  document.querySelector('#bats').append(li);
+
+  const btn = document.createElement('button');
+  btn.className = 'order';
+  btn.type = 'button';
+  btn.disabled = true;
+  btn.dataset.battery = b.id;
+  btn.dataset.type = b.type;
+  btn.setAttribute('aria-pressed', 'false');
+  btn.innerHTML = `<span class="order__name">${i + 1} ${b.name}</span><span class="order__hit">-</span>`;
+  holdBtn.before(btn);
+}
 const orderBtns = [...document.querySelectorAll('.order[data-battery]')];
 const sites$ = {};           // battery id -> its group on the scope
 const links$ = {};           // battery id -> its line to its target
 
-const bearingOf = c => (Math.atan2(c.x, c.y) * 180 / Math.PI + 360) % 360;
 const STATE = { inbound: ['接近中', 'INBOUND'], impact: ['着弾', 'IMPACT'], destroyed: ['撃破', 'DESTROYED'] };
 const mmss = t => `T+${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
@@ -327,7 +350,7 @@ function place() {
 const els = {
   target: document.querySelector('#target'),
   id: document.querySelector('#t-id'), kind: document.querySelector('#t-kind'),
-  bearing: document.querySelector('#t-bearing'), range: document.querySelector('#t-range'),
+  range: document.querySelector('#t-range'),
   eta: document.querySelector('#t-eta'), hull: document.querySelector('#t-hull'),
   goal: document.querySelector('#t-goal'), state: document.querySelector('#t-state'),
 };
@@ -346,7 +369,7 @@ const BAT_WORDS = {
   cooling:  () => 'FIRING',
   ready:    () => 'FIRING',
 };
-const goalOf = c => c.objective === 'city' ? 'TOKYO-3' : `${SIDE[c.objective]} BATTERY`;
+const goalOf = c => c.objective === 'city' ? 'TOKYO-3' : `${NAME[c.objective]} SITE`;
 
 function refresh(force) {
   const inbound = sim.inbound();
@@ -360,9 +383,13 @@ function refresh(force) {
   popEl.textContent = sim.population.toLocaleString('en-US');
   gfEl.textContent = `${Math.round(100 * sim.integrity / SIM.INTEGRITY)}%`;
   gfBox.dataset.level = sim.integrity === 0 ? 'breach' : sim.integrity <= SIM.INTEGRITY * 0.4 ? 'alert' : 'ok';
-  ammoEl.textContent = sim.ammo;
-  ammoFill.style.setProperty('--fill', (sim.ammo / SIM.POOL).toFixed(3));
-  ammoBox.dataset.low = String(sim.ammo <= 6);
+  const ammo = sim.ammo;
+  for (const [type, row] of Object.entries(ammoRows)) {
+    const left = Math.floor(ammo[type]), full = SIM.WEAPONS[type].pool;
+    row.num.textContent = left;
+    row.fill.style.setProperty('--fill', (ammo[type] / full).toFixed(3));
+    row.box.dataset.low = String(left <= full / 6);
+  }
 
   // Rows: soonest first, finished contacts below. Only move a row that is out of place.
   const order = [...shown.values()].sort((a, b) => {
@@ -392,14 +419,13 @@ function refresh(force) {
   if (c) {
     els.id.textContent = c.id;
     els.kind.textContent = c.kind;
-    els.bearing.textContent = `${String(Math.round(bearingOf(c)) % 360).padStart(3, '0')}°`;
     els.range.textContent = `${sim.dist(c).toFixed(1)} KM`;
     els.eta.textContent = `${sim.eta(c).toFixed(1)} S`;
     els.hull.textContent = `${Math.round(100 * c.hp / c.maxHp)}%`;
     els.goal.textContent = goalOf(c);
     els.state.textContent = STATE[c.state][1];
   } else {
-    for (const k of ['id', 'kind', 'bearing', 'range', 'eta', 'hull', 'goal', 'state']) els[k].textContent = '-';
+    for (const k of ['id', 'kind', 'range', 'eta', 'hull', 'goal', 'state']) els[k].textContent = '-';
   }
 
   // The batteries: what each is on, and what it is doing
@@ -413,9 +439,11 @@ function refresh(force) {
 
 
 /* ---------- SHOTS AND BURSTS ----------
-   A round in the air is a short tracer flying from its battery toward where the
-   contact is now, so it arrives when the sim says it lands. A burst is a ring
-   where a round landed. Both are for show: the sim has already decided. */
+   A round in the air is a short tracer flying a straight line from its site to
+   where the sim aimed it (the point the contact will have reached), arriving
+   when the sim says it lands. A burst is a ring where a round landed. Both are
+   for show: the sim has already decided. */
+const TRACER_PX = { GUN: 26, AA: 11 };    // tracer length
 const SVG = 'http://www.w3.org/2000/svg';
 const shotEls = new Map();    // shot id -> its line
 
@@ -427,15 +455,16 @@ function drawShots() {
     let el = shotEls.get(s.id);
     if (!el) {
       el = document.createElementNS(SVG, 'line');
-      el.setAttribute('class', 'shot');
+      el.setAttribute('class', `shot shot--${s.weapon.toLowerCase()}`);
       layer.append(el);
       shotEls.set(s.id, el);
     }
-    const b = sim.batteries.find(x => x.id === s.battery);
-    const t = sim.contacts.find(x => x.id === s.target);
+    // The path never changes: from the site to the aim point, head at k, tail a
+    // fixed number of pixels behind it
+    const [fx, fy] = scope.px(s.from.x, s.from.y), [tx, ty] = scope.px(s.to.x, s.to.y);
     const k = Math.min(1, (sim.time - s.t0) / (s.t1 - s.t0));
-    const k0 = Math.max(0, k - 0.2);
-    const at = n => scope.px(b.x + (t.x - b.x) * n, b.y + (t.y - b.y) * n);
+    const k0 = Math.max(0, k - TRACER_PX[s.weapon] / (Math.hypot(tx - fx, ty - fy) || 1));
+    const at = n => [fx + (tx - fx) * n, fy + (ty - fy) * n];
     const [x1, y1] = at(k0), [x2, y2] = at(k);
     el.setAttribute('x1', f(x1)); el.setAttribute('y1', f(y1));
     el.setAttribute('x2', f(x2)); el.setAttribute('y2', f(y2));
@@ -445,13 +474,14 @@ function drawShots() {
   }
 }
 
-function burst(kind, x, y) {
+function burst(kind, x, y, small) {
   const [px, py] = scope.px(x, y);
   const ring = document.createElementNS(SVG, 'circle');
   ring.setAttribute('class', `burst burst--${kind}`);
+  if (small) ring.dataset.small = 'true';
   ring.setAttribute('cx', f(px));
   ring.setAttribute('cy', f(py));
-  ring.setAttribute('r', kind === 'kill' ? 14 : 9);
+  ring.setAttribute('r', kind === 'kill' ? 14 : small ? 4 : 9);
   document.querySelector('#bursts').append(ring);
   setTimeout(() => ring.remove(), 700);
 }
@@ -478,27 +508,32 @@ const REFUSED = { target: ['交戦不能', 'NO TARGET'], silenced: ['沈黙中',
 const WORDS = {
   spawn:     e => ['info',   '未確認目標接近', `${e.id} UNIDENTIFIED CONTACT`],
   scope:     e => ['alert',  '防衛圏侵入',     `${e.id} ENTERS SCOPE`],
-  assign:    e => ['info',   '交戦',           `${SIDE[e.battery]} ON ${e.id}`],
-  hold:      e => ['info',   '待機',           `${SIDE[e.battery]} HOLDS FIRE`],
-  released:  e => ['info',   '待機',           `${SIDE[e.battery]} STANDS DOWN, ${e.id} DONE`],
-  fire:      e => ['info',   '砲撃',           `${SIDE[e.battery]} FIRES AT ${e.id}, ${Math.round(e.chance * 100)}%`],
+  assign:    e => ['info',   '交戦',           `${NAME[e.battery]} ON ${e.id}`],
+  hold:      e => ['info',   '待機',           `${NAME[e.battery]} HOLDS FIRE`],
+  released:  e => ['info',   '待機',           `${NAME[e.battery]} STANDS DOWN, ${e.id} DONE`],
+  fire:      e => ['info',   '砲撃',           `${NAME[e.battery]} FIRES AT ${e.id}, ${Math.round(e.chance * 100)}%`],
   hit:       e => ['info',   '命中',           `${e.id} HIT, HULL ${Math.round(100 * e.hp / e.maxHp)}%`],
   miss:      e => ['alert',  '外れ',           `${e.id} MISSED`],
   wasted:    e => ['alert',  '無効',           `${e.id} ROUND WASTED`],
   destroyed: e => ['info',   '撃破',           `${e.id} DESTROYED`],
   impact:    e => ['breach', '着弾',           `${e.id} IMPACT, POPULATION -${e.damage.toLocaleString('en-US')}`],
-  silenced:  e => ['breach', '砲台沈黙',       `${e.id} SILENCES ${SIDE[e.battery]} BATTERY`],
-  restored:  e => ['info',   '砲台復旧',       `${SIDE[e.battery]} BATTERY BACK`],
+  silenced:  e => ['breach', '砲台沈黙',       `${e.id} SILENCES ${NAME[e.battery]} SITE`],
+  restored:  e => ['info',   '砲台復旧',       `${NAME[e.battery]} SITE BACK`],
   breach:    e => ['breach', 'ジオフロント侵入', `GEOFRONT BREACHED BY ${e.id}`],
-  refused:   e => ['alert',  ...REFUSED[e.reason].map((w, i) => i ? `${w}${e.battery ? ' ' + SIDE[e.battery] : ''}` : w)],
+  refused:   e => ['alert',  ...REFUSED[e.reason].map((w, i) => i ? `${w}${e.battery ? ' ' + NAME[e.battery] : ''}` : w)],
 };
 
 function report(events) {
   for (const e of events) {
-    const [level, ja, en] = WORDS[e.type](e);
-    say(level, ja, en);
-    if (e.type === 'hit') burst('hit', e.x, e.y);
-    if (e.type === 'miss') burst('miss', e.x, e.y);
+    // AA fires several rounds a second per site: show the tracers and small
+    // bursts, but keep them out of the log and the ticker
+    const aa = TYPE[e.battery] === 'AA' && ['fire', 'hit', 'miss', 'wasted'].includes(e.type);
+    if (!aa) {
+      const [level, ja, en] = WORDS[e.type](e);
+      say(level, ja, en);
+    }
+    if (e.type === 'hit') burst('hit', e.x, e.y, aa);
+    if (e.type === 'miss') burst('miss', e.x, e.y, aa);
     if (e.type === 'destroyed') burst('kill', e.x, e.y);
     if (e.type === 'impact') {
       for (const box of [popBox, gfBox]) {
@@ -548,7 +583,7 @@ function tick(now) {
    The player never fires: they put batteries on contacts and take them off,
    and the sim's batteries do the rest. */
 const bar = document.querySelector('.bar');
-const ORDER_KEYS = { 1: 'north', 2: 'south', 3: 'east' };
+const ORDER_KEYS = Object.fromEntries(SIM.BATTERIES.map((b, i) => [i + 1, b.id]));
 
 function after() {
   report(sim.takeEvents());

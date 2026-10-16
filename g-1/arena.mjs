@@ -35,11 +35,11 @@ function view(sim) {
     ammo: sim.ammo,
     integrity: sim.integrity,
     contacts: sim.inbound().map(c => ({
-      id: c.id, kind: c.kind, objective: c.objective, hp: c.hp, eta: sim.eta(c),
+      id: c.id, kind: c.kind, objective: c.objective, hp: c.hp, armor: SIM.KINDS[c.kind].armor, speed: c.speed, eta: sim.eta(c),
       chance: Object.fromEntries(sim.batteries.map(b => [b.id, sim.chanceOf(b, c)])),
       inFlight: sim.shots.filter(s => s.target === c.id).length,
     })),
-    batteries: sim.batteries.map(b => ({ id: b.id, target: b.target, state: sim.stateOf(b) })),
+    batteries: sim.batteries.map(b => ({ id: b.id, type: b.type, target: b.target, state: sim.stateOf(b) })),
   };
 }
 
@@ -83,36 +83,51 @@ const BOTS = {
     return out;
   },
 
-  // Uses what the rules offer: raiders and heavies first by what they would
-  // cost, no more batteries on a contact than its hull needs, and no firing
-  // below a fair hit chance (holding instead, to save the pool)
-  PRIORITY: v => {
-    const VALUE = { RAIDER: 30, HEAVY: 40, STANDARD: 15, SCOUT: 5 };
-    const MIN_CHANCE = 0.5;
+  // Uses what the rules offer. Contacts are taken in order of what they would
+  // cost per second of warning; each gets the batteries with the best expected
+  // damage per second (hit chance x damage after armor / cooldown), no more than
+  // its hull needs over the next few seconds, and a battery with no fair chance
+  // (under 50%) holds instead, to save its pool.
+  PRIORITY: priority(),
+
+  // PRIORITY restricted to one weapon: if either of these does as well as
+  // PRIORITY, the other weapon is decoration
+  'GUNS-ONLY': priority({ allow: ['GUN'] }),
+  'AA-ONLY': priority({ allow: ['AA'] }),
+
+  // PRIORITY that values every contact the same: shows what ranking threats is worth
+  FLAT: priority({ flat: true }),
+};
+
+function priority({ allow = ['GUN', 'AA'], flat = false } = {}) {
+  const VALUE = flat ? { RAIDER: 15, HEAVY: 15, STANDARD: 15, SCOUT: 15 } : { RAIDER: 30, HEAVY: 40, STANDARD: 15, SCOUT: 5 };
+  const MIN_CHANCE = 0.5;
+  const HORIZON = 8;       // seconds of fire counted toward killing a contact
+  return v => {
     const urgency = c => VALUE[c.kind] / (c.eta + 5);
-    const free = new Set(v.batteries.filter(b => b.state !== 'silenced').map(b => b.id));
+    const free = new Set(v.batteries.filter(b => b.state !== 'silenced' && allow.includes(b.type)).map(b => b.id));
+    const type = id => v.batteries.find(b => b.id === id).type;
     const out = {};
     for (const c of [...v.contacts].sort((a, b) => urgency(b) - urgency(a))) {
-      const hits = Math.ceil(c.hp / SIM.SHOT_DAMAGE) - c.inFlight * 0.6;
-      let want = Math.min(3, Math.max(0, Math.ceil(hits)));
-      // Batteries already on it first (no retarget delay), then the best chance
+      const dps = id => c.chance[id] * Math.max(1, SIM.WEAPONS[type(id)].damage - c.armor) / SIM.WEAPONS[type(id)].cooldown;
       const bats = [...free]
-        .filter(id => v.contacts.length && c.chance[id] !== null && c.chance[id] >= MIN_CHANCE)
+        .filter(id => c.chance[id] !== null && c.chance[id] >= MIN_CHANCE)
         .sort((a, b) => {
           const on = id => v.batteries.find(x => x.id === id).target === c.id ? 1 : 0;
-          return on(b) - on(a) || c.chance[b] - c.chance[a];
+          return on(b) - on(a) || dps(b) - dps(a);
         });
+      let need = c.hp - c.inFlight * 0.5 * 20;      // rounds already in the air count for a little
       for (const id of bats) {
-        if (want <= 0) break;
+        if (need <= 0) break;
         out[id] = c.id;
         free.delete(id);
-        want--;
+        need -= dps(id) * Math.min(HORIZON, Math.max(c.eta, 2));
       }
     }
     for (const id of free) out[id] = null;
     return out;
-  },
-};
+  };
+}
 
 function play(bot, seed) {
   const sim = SIM.create(seed);
@@ -150,12 +165,17 @@ for (const name of Object.keys(BOTS)) {
 }
 
 console.log(`${SEEDS} seeds, ${SIM.schedule(1).length} contacts each, bots decide every ${DECIDE} s\n`);
-console.log('bot        population left     breached  geofront  rounds fired');
+console.log('bot          population left     breached  geofront  rounds fired');
 for (const [name, r] of Object.entries(results)) {
-  console.log(`${name.padEnd(10)} ${Math.round(r.population).toLocaleString('en').padStart(9)} (${pct(r.population, SIM.START_POPULATION).padStart(6)})   ${pct(r.breaches, SEEDS).padStart(6)}   ${r.integrity.toFixed(0).padStart(6)}   ${r.fired.toFixed(0).padStart(8)}`);
+  console.log(`${name.padEnd(12)} ${Math.round(r.population).toLocaleString('en').padStart(9)} (${pct(r.population, SIM.START_POPULATION).padStart(6)})   ${pct(r.breaches, SEEDS).padStart(6)}   ${r.integrity.toFixed(0).padStart(6)}   ${r.fired.toFixed(0).padStart(8)}`);
 }
 const gap = results.PRIORITY.population / results.SPAM.population - 1;
 console.log(`\nPRIORITY vs SPAM: ${gap >= 0 ? '+' : ''}${(100 * gap).toFixed(1)}% population (target: +30% or more)`);
 // The harder check: against the best single habit, not the worst
 const habit = results.PRIORITY.population / results.PATIENT.population - 1;
 console.log(`PRIORITY vs PATIENT: ${habit >= 0 ? '+' : ''}${(100 * habit).toFixed(1)}% population`);
+// Each of these should be clearly worse than PRIORITY, or the thing it takes away does not matter
+for (const [name, what] of [['GUNS-ONLY', 'without the AA'], ['AA-ONLY', 'without the guns'], ['FLAT', 'without ranking threats']]) {
+  const d = results[name].population / results.PRIORITY.population - 1;
+  console.log(`${name} vs PRIORITY: ${d >= 0 ? '+' : ''}${(100 * d).toFixed(1)}% population (${what})`);
+}

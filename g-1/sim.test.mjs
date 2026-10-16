@@ -5,7 +5,9 @@
 import assert from 'node:assert/strict';
 import SIM from './sim.js';
 
-const { STEP, SPAWN_KM, SCOPE_KM, CITY_KM, RAID_KM, SECTOR, KINDS, RANGE_KM, COOLDOWN, RETARGET, SILENCED, POOL, RESUPPLY, SHOT_KMS, SHOT_DAMAGE, START_POPULATION, INTEGRITY } = SIM;
+const { STEP, SPAWN_KM, SCOPE_KM, CITY_KM, RAID_KM, SECTOR, KINDS, WEAPONS, RETARGET, SILENCED, START_POPULATION, INTEGRITY } = SIM;
+const GUN = WEAPONS.GUN, AA = WEAPONS.AA;
+const RANGE_KM = GUN.range, COOLDOWN = GUN.cooldown, SHOT_DAMAGE = GUN.damage, POOL = GUN.pool, RESUPPLY = GUN.resupply;
 let failed = 0;
 
 function test(name, fn) {
@@ -38,16 +40,16 @@ test('it flies a straight line at constant speed', () => {
   near(sim.dist(c), SPAWN_KM - KINDS.STANDARD.speed * 300 * STEP, 1e-6, 'distance after 10 s');
 });
 
-test('a standard contact crosses the whole path in 45 to 50 s', () => {
+test('a standard contact crosses the whole path in 60 to 66 s', () => {
   const sim = SIM.create();
   const c = sim.spawn('STANDARD', 180);
   runUntil(sim, () => c.state === 'impact');
   assert.equal(c.state, 'impact');
   near(sim.time, (SPAWN_KM - CITY_KM) / KINDS.STANDARD.speed, STEP * 2, 'time to impact');
-  assert.ok(sim.time >= 45 && sim.time <= 50, `took ${sim.time} s`);
+  assert.ok(sim.time >= 60 && sim.time <= 66, `took ${sim.time} s`);
 });
 
-test('it reaches the scope after about 20 s, which leaves 25 to 30 s on it', () => {
+test('it reaches the scope after about 26 s, which leaves 35 to 40 s on it', () => {
   const sim = SIM.create();
   const c = sim.spawn('STANDARD', 180);
   runUntil(sim, () => c.onScope);
@@ -55,7 +57,7 @@ test('it reaches the scope after about 20 s, which leaves 25 to 30 s on it', () 
   const onScopeAt = sim.time;
   runUntil(sim, () => c.state === 'impact');
   const left = sim.time - onScopeAt;
-  assert.ok(left >= 25 && left <= 30, `${left} s left on the scope`);
+  assert.ok(left >= 35 && left <= 40, `${left} s left on the scope`);
 });
 
 test('it stops at the edge of the city and impacts exactly once', () => {
@@ -130,12 +132,22 @@ const types = events => events.map(e => e.type);
 const bat = (sim, id) => sim.batteries.find(b => b.id === id);
 const seconds = (sim, s) => { for (let i = 0; i < Math.round(s / STEP); i++) sim.step(STEP); };
 
-test('hit chance is 85% close in, 20% at the edge of the range, a straight line between, none beyond', () => {
-  near(SIM.hitChance(0), 0.85, 1e-9, 'at 0 km');
-  near(SIM.hitChance(4), 0.85, 1e-9, 'at 4 km');
-  near(SIM.hitChance(8), 0.525, 1e-9, 'at 8 km');
-  near(SIM.hitChance(RANGE_KM), 0.20, 1e-9, 'at the range');
-  assert.equal(SIM.hitChance(RANGE_KM + 0.01), null);
+test('gun hit chance is 85% close in, 20% at the edge of the range, a straight line between, none beyond', () => {
+  near(SIM.hitChance('GUN', 0), 0.85, 1e-9, 'at 0 km');
+  near(SIM.hitChance('GUN', 4), 0.85, 1e-9, 'at 4 km');
+  near(SIM.hitChance('GUN', 8), 0.525, 1e-9, 'at 8 km');
+  near(SIM.hitChance('GUN', RANGE_KM), 0.20, 1e-9, 'at the range');
+  assert.equal(SIM.hitChance('GUN', RANGE_KM + 0.01), null);
+});
+
+test('guns lose accuracy against fast contacts, AA does not', () => {
+  near(SIM.hitChance('GUN', 4, 0.6), 0.85, 1e-9, 'at 0.6 km/s');
+  near(SIM.hitChance('GUN', 4, 0.9), 0.85 * 0.75, 1e-9, 'at 0.9 km/s');
+  near(SIM.hitChance('GUN', 4, 1.2), 0.85 * 0.5, 1e-9, 'at 1.2 km/s');
+  near(SIM.hitChance('GUN', 4, 3), 0.85 * 0.5, 1e-9, 'floor');
+  near(SIM.hitChance('AA', 2, 1.05), 0.80, 1e-9, 'AA close in');
+  near(SIM.hitChance('AA', 6, 1.05), 0.50, 1e-9, 'AA at its range');
+  assert.equal(SIM.hitChance('AA', 6.01), null);
 });
 
 test('nothing fires without an order', () => {
@@ -143,7 +155,7 @@ test('nothing fires without an order', () => {
   parked(sim);
   seconds(sim, 20);
   assert.ok(!types(sim.takeEvents()).includes('fire'));
-  assert.equal(sim.ammo, POOL);
+  assert.equal(sim.ammo.GUN, POOL);
   assert.ok(sim.batteries.every(b => sim.stateOf(b) === 'hold'));
 });
 
@@ -161,7 +173,7 @@ test('an assigned battery waits out the retarget delay, then fires every cooldow
   const fired = sim.takeEvents().filter(e => e.type === 'fire');
   assert.equal(fired.length, 3);
   assert.ok(fired.every(e => e.battery === 'east' && e.id === c.id));
-  assert.ok(sim.ammo <= POOL - 4 + 1, `pool ${sim.ammo}`);   // four rounds out, at most one back
+  assert.ok(sim.ammo.GUN <= POOL - 4 + 1, `pool ${sim.ammo.GUN}`);   // four rounds out, at most one back
 });
 
 test('the same order again changes nothing; a new target costs the delay again', () => {
@@ -184,7 +196,7 @@ test('assigned out of range costs nothing and fires once the target comes in', (
   sim.assign('north', c.id);
   seconds(sim, RETARGET + 1);
   assert.equal(sim.stateOf(bat(sim, 'north')), 'range');
-  assert.equal(sim.ammo, POOL);
+  assert.equal(sim.ammo.GUN, POOL);
   runUntil(sim, () => sim.reach(bat(sim, 'north'), c) <= RANGE_KM - 0.5);
   assert.ok(sim.takeEvents().some(e => e.type === 'fire' && e.battery === 'north'));
 });
@@ -235,13 +247,70 @@ test('an empty pool stops every battery, and it refills one round per RESUPPLY u
   const c = parked(sim, 4);
   c.hp = c.maxHp = 1e9;
   for (const id of ['north', 'south', 'east']) sim.assign(id, c.id);
-  runUntil(sim, () => sim.ammo === 0);
+  runUntil(sim, () => sim.ammo.GUN === 0);
   assert.ok(sim.batteries.some(b => sim.stateOf(b) === 'dry'));
   for (const id of ['north', 'south', 'east']) sim.hold(id);
   seconds(sim, RESUPPLY * 3 + 0.05);
-  assert.equal(sim.ammo, 3);
+  assert.equal(sim.ammo.GUN, 3);
   seconds(sim, RESUPPLY * (POOL + 5));
-  assert.equal(sim.ammo, POOL);
+  assert.equal(sim.ammo.GUN, POOL);
+});
+
+test('a round is aimed at where the contact will be, and the contact is there when it lands', () => {
+  for (const seed of [1, 2, 3]) {
+    const sim = SIM.create(seed);
+    const c = sim.spawn('STANDARD', 135);
+    runUntil(sim, () => sim.dist(c) <= 9);
+    c.hp = c.maxHp = 1e9;
+    sim.assign('east', c.id);
+    runUntil(sim, () => sim.shots.length === 1);
+    const s = sim.shots[0], b = bat(sim, 'east');
+    sim.hold('east');
+    const flight = s.t1 - s.t0;
+    near(Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y), GUN.roundKms * flight, 1e-9, 'round path length');
+    assert.deepEqual(s.from, { x: b.x, y: b.y });
+    // the contact is moving, so the aim point is ahead of it, not on it
+    const ahead = Math.hypot(s.to.x - c.x, s.to.y - c.y);
+    near(ahead, KINDS.STANDARD.speed * flight, KINDS.STANDARD.speed * STEP * 2, 'lead length');
+    assert.ok(ahead > 0.2, `lead ${ahead} km`);
+    runUntil(sim, () => sim.shots.length === 0);
+    near(c.x, s.to.x, 0.05, 'contact x at landing');
+    near(c.y, s.to.y, 0.05, 'contact y at landing');
+  }
+});
+
+test('a parked contact is aimed at directly, and a faster one is led further than a slower one', () => {
+  const sim = SIM.create(1);
+  const c = parked(sim);
+  sim.assign('east', c.id);
+  runUntil(sim, () => sim.shots.length === 1);
+  near(sim.shots[0].to.x, c.x, 1e-9, 'x');
+  near(sim.shots[0].to.y, c.y, 1e-9, 'y');
+
+  const lead = kind => {
+    const s2 = SIM.create(1);
+    const k = s2.spawn(kind, 135, 'north');
+    k.x = 3; k.y = -9; k.vx = -KINDS[kind].speed; k.vy = 0;       // crossing the east and south batteries' field
+    k.hp = k.maxHp = 1e9;
+    s2.assign('south', k.id);
+    runUntil(s2, () => s2.shots.length === 1);
+    return Math.hypot(s2.shots[0].to.x - k.x, s2.shots[0].to.y - k.y);
+  };
+  assert.ok(lead('RAIDER') > lead('STANDARD') * 1.5, `${lead('RAIDER')} vs ${lead('STANDARD')}`);
+});
+
+test('a miss lands beside the contact, not on it, and uses no random numbers', () => {
+  const sim = SIM.create(2);
+  const c = parked(sim, 11);                         // far out: many misses
+  c.hp = c.maxHp = 1e9;
+  for (const id of ['north', 'south', 'east']) sim.assign(id, c.id);
+  seconds(sim, 40);
+  const misses = sim.takeEvents().filter(e => e.type === 'miss');
+  assert.ok(misses.length >= 5, `${misses.length} misses`);
+  for (const m of misses) {
+    const off = Math.hypot(m.x - c.x, m.y - c.y);
+    assert.ok(off >= 0.39 && off <= 0.81, `miss ${off} km from the contact`);
+  }
 });
 
 test('a round lands after distance / speed and then hits or misses as it was rolled', () => {
@@ -252,7 +321,7 @@ test('a round lands after distance / speed and then hits or misses as it was rol
     runUntil(sim, () => sim.shots.length === 1);
     sim.hold('east');
     const s = sim.shots[0], before = c.hp;
-    near(s.t1 - s.t0, sim.reach(bat(sim, 'east'), c) / SHOT_KMS, 1e-9, 'flight time');
+    near(s.t1 - s.t0, sim.reach(bat(sim, 'east'), c) / GUN.roundKms, 1e-9, 'flight time at a parked contact');
     sim.takeEvents();
     runUntil(sim, () => sim.shots.length === 0);
     assert.ok(sim.time >= s.t1 && sim.time < s.t1 + STEP * 2, 'lands on time');
@@ -357,8 +426,9 @@ test('a raider flies at its battery, silences it, and costs the city nothing', (
 test('a raider with no battery given picks one from the spawn stream, the same for a seed', () => {
   const pick = seed => { const sim = SIM.create(seed); return [1, 2, 3, 4, 5, 6].map(() => sim.spawnRandom('RAIDER').objective); };
   assert.deepEqual(pick(3), pick(3));
-  const all = new Set([...pick(3), ...pick(4), ...pick(5)]);
-  assert.deepEqual([...all].sort(), ['east', 'north', 'south']);
+  const all = new Set();
+  for (let seed = 3; seed < 15; seed++) for (const id of pick(seed)) all.add(id);
+  assert.deepEqual([...all].sort(), SIM.BATTERIES.map(b => b.id).sort());
   assert.equal(SIM.create(1).spawn('STANDARD', 150, 'north').objective, 'city');
 });
 

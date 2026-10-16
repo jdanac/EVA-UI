@@ -17,7 +17,8 @@
   --cyan-dim: #0d4f4c;
   --alert: #ff3b1f;       /* contacts, impact, danger */
   --warn: #ffc23d;        /* a yellower amber, for markers that must stand out from the map lines */
-  --ok: #3ee08a;
+  --ok: #3ee08a;         /* AA sites and their pool */
+  --ok-dim: #1b5c3a;
   --ink: #f1eee6;
   --bg: #000000;
 
@@ -243,14 +244,16 @@ body {
 .city .city__ground { fill: var(--bg); stroke: var(--bg); stroke-width: 3px; }
 .city .city__ring { fill: none; stroke: var(--amber); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.8; }
 
-/* A battery: a diamond with its name, inside a faint ring showing its reach.
-   Dim while it holds, hollow teal on a target, filled for the moment after a
-   shot (cooling), dashed while it swings onto a new target, amber with no ammo
-   and red while a raider has silenced it. */
-.site__mark { fill: var(--bg); stroke: var(--cyan); stroke-width: 1.8; }
-.site__range { fill: none; stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 2 5; opacity: 0.22; }
-.site[data-state="hold"] .site__mark { stroke: var(--cyan-dim); }
-.site[data-state="cooling"] .site__mark { fill: var(--cyan); }
+/* A site: a diamond (gun, teal) or triangle (AA, green) with its name, inside a
+   faint ring showing its reach. Dim while it holds, hollow on a target, filled
+   for the moment after a shot (cooling), dashed while it swings onto a new
+   target, amber with no ammo and red while a raider has silenced it. */
+.site { --ty: var(--cyan); --ty-dim: var(--cyan-dim); }
+.site[data-type="AA"] { --ty: var(--ok); --ty-dim: var(--ok-dim); }
+.site__mark { fill: var(--bg); stroke: var(--ty); stroke-width: 1.8; }
+.site__range { fill: none; stroke: var(--ty); stroke-width: 1; stroke-dasharray: 2 5; opacity: 0.22; }
+.site[data-state="hold"] .site__mark { stroke: var(--ty-dim); }
+.site[data-state="cooling"] .site__mark { fill: var(--ty); }
 .site[data-state="retarget"] .site__mark { stroke-dasharray: 3 2; }
 .site[data-state="dry"] .site__mark { stroke: var(--warn); }
 .site[data-state="dry"] .site__ja { fill: var(--warn); }
@@ -258,7 +261,7 @@ body {
 .site[data-state="silenced"] .site__ja { fill: var(--alert); }
 .site[data-state="silenced"] .site__range { opacity: 0; }
 .site__ja {
-  fill: var(--cyan);
+  fill: var(--ty);
   font-family: var(--font-jp);
   font-weight: 800;
   font-size: 10px;
@@ -338,6 +341,7 @@ body {
 /* A round in the air, and the ring where one lands: amber for a hit, teal for a
    miss, white and larger for a kill */
 .shot { stroke: var(--warn); stroke-width: 2.2; stroke-linecap: round; }
+.shot--aa { stroke: var(--ok); stroke-width: 1.6; }
 .burst {
   fill: none;
   stroke-width: 2;
@@ -348,6 +352,7 @@ body {
 .burst--hit  { stroke: var(--warn); }
 .burst--miss { stroke: var(--cyan); }
 .burst--kill { stroke: var(--ink); stroke-width: 3; }
+.burst[data-small="true"] { stroke-width: 1.2; animation-duration: 0.35s; }
 @keyframes burst {
   from { transform: scale(0.4); opacity: 1; }
   to   { transform: scale(2.2); opacity: 0; }
@@ -418,16 +423,19 @@ body {
 /* Batteries: name (with its key), the contact it is on, and what it is doing.
    Same colors as the diamonds on the scope. */
 .cell--bat .cell__body { padding: 8px 10px; display: flex; flex-direction: column; }
-.bats { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.bats { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 11px; }
 .bats li {
-  --st: var(--cyan);
+  --ty: var(--cyan);
+  --ty-dim: var(--cyan-dim);
+  --st: var(--ty);
   display: grid;
-  grid-template-columns: 70px 1fr auto;
+  grid-template-columns: 62px 1fr auto;
   gap: 8px;
   align-items: center;
   color: var(--st);
 }
-.bats li[data-state="hold"]     { --st: var(--cyan-dim); }
+.bats li[data-type="AA"]        { --ty: var(--ok); --ty-dim: var(--ok-dim); }
+.bats li[data-state="hold"]     { --st: var(--ty-dim); }
 .bats li[data-state="dry"]      { --st: var(--warn); }
 .bats li[data-state="silenced"] { --st: var(--alert); }
 .bat__name { font-family: var(--font-label); font-weight: 700; letter-spacing: 0.18em; }
@@ -439,12 +447,15 @@ body {
 .ammo {
   --st: var(--cyan);
   display: grid;
-  grid-template-columns: 70px 1fr 26px;
+  grid-template-columns: 78px 1fr 28px;
   gap: 8px;
   align-items: center;
-  margin: 9px 0 0;
+  margin: 4px 0 0;
+  font-size: 11px;
   color: var(--st);
 }
+.ammo:first-of-type { margin-top: 8px; }
+.ammo[data-pool="AA"] { --st: var(--ok); }
 .ammo[data-low="true"] { --st: var(--warn); }
 .ammo__label { font-family: var(--font-label); font-weight: 700; letter-spacing: 0.18em; }
 .ammo__label [lang="ja"] { font-family: var(--font-jp); font-weight: 800; letter-spacing: 0.02em; }
@@ -551,16 +562,18 @@ body {
 .target[data-empty="true"] .rows dd { color: var(--amber-dim); }
 .orders { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .order {
+  --ty: var(--cyan);
+  --ty-dim: var(--cyan-dim);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  height: 48px;
+  gap: 2px;
+  height: 40px;
   padding: 0;
-  border: 2px solid var(--cyan);
+  border: 2px solid var(--ty);
   background: var(--bg);
-  color: var(--cyan);
+  color: var(--ty);
   font-family: var(--font-label);
   font-weight: 700;
   font-size: 11px;
@@ -568,12 +581,13 @@ body {
   cursor: pointer;
 }
 .order__hit { font-family: var(--font-mono); font-weight: 400; font-size: 12px; letter-spacing: 0.06em; }
-.order:hover:not(:disabled) { background: var(--cyan-dim); }
-.order[aria-pressed="true"] { background: var(--cyan); color: var(--bg); }
+.order[data-type="AA"] { --ty: var(--ok); --ty-dim: var(--ok-dim); }
+.order:hover:not(:disabled) { background: var(--ty-dim); }
+.order[aria-pressed="true"] { background: var(--ty); color: var(--bg); }
 .order:disabled { opacity: 0.35; cursor: default; }
 .order:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.order--hold { border-color: var(--amber); color: var(--amber); }
-.order--hold:hover { background: var(--amber-dim); }
+.order--hold { grid-column: span 2; border-color: var(--amber); color: var(--amber); }
+.order.order--hold:hover:not(:disabled) { background: var(--amber-dim); }
 .order--hold .order__name { font-family: var(--font-jp); font-weight: 800; font-size: 14px; letter-spacing: 0.1em; }
 .order--hold .order__hit { font-family: var(--font-label); font-weight: 700; font-size: 10px; letter-spacing: 0.14em; }
 
@@ -620,7 +634,7 @@ body {
   width: 1240px;
   height: 56px;
   display: grid;
-  grid-template-columns: 160px 100px 100px 110px 1fr 210px 190px;
+  grid-template-columns: 166px 88px 88px 100px 1fr 190px 190px;
   gap: 8px;
   align-items: stretch;
 }
