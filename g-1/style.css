@@ -709,7 +709,7 @@ body {
 .ticker[data-level="breach"] { --st: var(--alert); }
 .ticker__time { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; opacity: 0.8; }
 .ticker__ja { font-family: var(--font-jp); font-weight: 800; font-size: 16px; }
-.ticker__en { font-family: var(--font-label); font-weight: 700; font-size: 13px; letter-spacing: 0.2em; }
+.ticker__en { font-family: var(--font-label); font-weight: 700; font-size: 13px; letter-spacing: 0.2em; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 /* The Geofront (its integrity: zero is a breach and the end of the run) and
    the city (the population it still has, which is the score). Same box. */

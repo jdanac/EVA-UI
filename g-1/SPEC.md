@@ -192,12 +192,12 @@ arena's schedule becomes the first draft of the wave table.
 
 The rules the build follows. Numbers are placeholders, to be tuned in the arena.
 
-**Battery geometry.** The batteries stay where they are (4 to 5 km from the
-city, 12 km range). Measured: the first battery reaches a contact 14 to 17 km
-out, depending on bearing, and inside about 7 km all three cover it. So the
-decision in milestone A is how many batteries go on which contact, more than
-which battery. If the arena shows no gap, the geometry is revisited (outer
-sites, firing arcs or different ranges).
+**Battery geometry.** The three guns stay where they are (4 to 5 km from the
+city, 12 km range). Measured: the first gun reaches a contact 14 to 17 km out,
+depending on bearing, and inside about 7 km all three cover it, so with guns
+alone the decision was how many to put on which contact, more than which one.
+The three AA sites added on 2026-10-15 (see "Weapons") are the first answer to
+that: short range and further out, so which site covers which approach matters.
 
 **C1 fire orders.**
 - Each battery is HOLD or ASSIGNED to one contact. Several batteries may be
@@ -220,8 +220,8 @@ chance falls more steeply at long range (85% at 4 km or closer to 20% at
 
 **C2 threat types for the milestone.** SCOUT is dropped for now; three kinds:
 - STANDARD and HEAVY as today, flying at the city.
-- RAIDER: 1.4 km/s, hull 50, flies at one battery (chosen from the spawn
-  stream) instead of the city. When it reaches it (within 0.5 km) the battery is
+- RAIDER: 1.05 km/s (1.4 before the contacts were slowed 25%), hull 50, flies
+  at one site (chosen from the spawn stream) instead of the city. When it reaches it (within 0.5 km) the battery is
   SILENCED for 20 s: it cannot fire, and it loses its assignment. A raider does
   no population damage.
 - A contact's ETA is measured to its own objective, so the contact list sorts a
@@ -343,12 +343,23 @@ was too easy: PATIENT reached 68% beside PRIORITY's 77%).
 - PRIORITY is 35% ahead of PATIENT: still more than one habit deep.
 - **Neither weapon is decoration:** without the AA PRIORITY loses 86% of its
   population, without the guns 91%.
-- **Threat ranking still does not pay:** FLAT (just the soonest contact) beats
-  the ranked bot by 13%. Armor and speed made the weapons matter, but "which
-  contact first" is still answered by ETA. The decision C2 is meant to create is
-  not there yet; it needs something the soonest contact does not tell you (a
-  contact that is a bigger danger than its ETA says, or one that is not what it
-  seems, see C6).
+- **A criterion of the plan was missed:** threat ranking should have started to
+  pay once armor and speed made the weapons matter, and it did not. FLAT (just
+  the soonest contact, with the weapons chosen well) beats the ranked bot by
+  13%, so the best known play is FLAT: **60.5% against PATIENT's 39.6%**
+  (+53%). "Which contact first" is still answered by ETA. The decision C2 is
+  meant to create is not there yet; it needs something the soonest contact does
+  not tell you (a contact that is a bigger danger than its ETA says, or one
+  that is not what it seems, see C6).
+- **Slower is not the same as calmer.** This tuning made the run harder for
+  every bot (PRIORITY kept 77% and was breached 1.3% of runs before, 53% and
+  10% now), and the bots give about the same number of orders a minute as
+  before (PRIORITY 14.8 before, 15.5 now). The schedule times did not change,
+  so slower contacts overlap more. Stretching the schedule by 1/0.75 to keep
+  the first build's overlap makes it too easy (PRIORITY 86%, PATIENT 89%: one
+  habit wins), so the heavy hull would have to rise to about 380 to keep a gap
+  (PRIORITY 44%, PATIENT 29%, 12 orders a minute). The choice between today's
+  balance and that calmer one is the owner's, after playing.
 - The bots decide every second and the human has a pause, so a person can match
   them; the unknown is whether six sites make the orders too many. A standing
   order per site (for example fire only above a hit chance) is the likely
