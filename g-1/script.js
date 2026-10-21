@@ -38,7 +38,7 @@ function makeView(svg, radius) {
   return { size, half, ppk, px: (x, y) => [half + x * ppk, half - y * ppk] };
 }
 const scope = makeView(scopeSvg, SIM.SCOPE_KM);
-const wide = makeView(wideSvg, 56);                  // 40 km spawn ring plus margin
+const wide = makeView(wideSvg, 56);                  // wide map: the 25 km spawn ring with room for the coast around it
 
 
 /* ---------- DRAWING ---------- */
@@ -168,6 +168,8 @@ let shown = new Map();       // contact id -> the elements that show it
 let gone = new Set();        // ids already faded out (the sim still lists them, so they must not be drawn again)
 let selected = null;         // id of the selected contact
 let paused = false;          // the sim stands still; orders can still be given
+let rate = 1;                // game seconds per real second (1, 2 or 4): time compression, nothing else changes
+const RATES = [1, 2, 4];
 let queue = [];              // the run's contacts still to come (SIM.schedule), soonest first
 
 const SIZE = { SCOUT: 3.5, STANDARD: 5, HEAVY: 7, RAIDER: 3.5 };   // dot radius by type, in scope pixels
@@ -186,7 +188,9 @@ const ammoRows = {};         // weapon type -> its pool bar in the BATTERIES box
 for (const box of document.querySelectorAll('.ammo')) {
   ammoRows[box.dataset.pool] = { box, num: box.querySelector('.ammo__num'), fill: box.querySelector('i') };
 }
+const aarEl = document.querySelector('#aar');
 const pauseBtn = document.querySelector('#pause');
+const speedBtn = document.querySelector('#speed');
 
 // The six rows in the BATTERIES box and the six order buttons come from the
 // sim's list of sites, so a site added there shows up here with no markup
@@ -196,7 +200,9 @@ for (const [i, b] of SIM.BATTERIES.entries()) {
   li.dataset.battery = b.id;
   li.dataset.type = b.type;
   li.dataset.state = 'hold';
-  li.innerHTML = `<span class="bat__name">${i + 1} ${b.name}</span><span class="bat__target">-</span><span class="bat__state">HOLD</span>`;
+  li.innerHTML = `<span class="bat__name">${i + 1} ${b.name}</span><span class="bat__target">-</span><span class="bat__state">HOLD</span>`
+    + `<button class="bat__auto" type="button" aria-pressed="false" title="Standing order: this site picks its own targets (Shift+${i + 1}, A for all)">AUTO</button>`;
+  li.dataset.auto = 'false';
   document.querySelector('#bats').append(li);
 
   const btn = document.createElement('button');
@@ -214,9 +220,21 @@ const sites$ = {};           // battery id -> its group on the scope
 const links$ = {};           // battery id -> its line to its target
 
 const STATE = { inbound: ['接近中', 'INBOUND'], impact: ['着弾', 'IMPACT'], destroyed: ['撃破', 'DESTROYED'] };
+// The forecast (sim.forecast) in words: short for a row, longer for the panel,
+// where a leak or a close call is followed by the share of its hull the fire is expected to take
+const OUTLOOK = { open: ['NONE', 'NO SITE'], leaks: ['LEAK', 'LEAKS'], close: ['CLOSE', 'CLOSE'], holds: ['STOP', 'STOPPED'] };
 const mmss = t => `T+${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
+// What happened this run, counted from the events and, for idle time, the
+// sites' states each step. Read only by the after-action report.
+let aar = null;
+const freshAar = () => ({
+  fired: { GUN: 0, AA: 0 }, hit: { GUN: 0, AA: 0 }, longShots: 0, wasted: 0,
+  kills: 0, silenced: 0, impacts: [], idle: 0,
+});
+
 function begin() {
+  aar = freshAar();
   seed = Number(params.get('seed')) || Math.floor(Math.random() * 1e9);
   sim = SIM.create(seed);
   queue = SIM.schedule(seed);
@@ -226,6 +244,7 @@ function begin() {
   gone.clear();
   selected = null;
   setPaused(false);
+  setRate(1);
   for (const el of shotEls.values()) el.remove();
   shotEls.clear();
   document.querySelector('#bursts').replaceChildren();
@@ -256,7 +275,7 @@ function show(c) {
 
   const li = document.createElement('li');
   li.innerHTML = `<button class="row" type="button" data-id="${c.id}"><b class="row__id">${c.id}</b>`
-    + `<span class="row__kind"><span lang="ja">${SIM.KINDS[c.kind].ja}</span> ${c.kind}</span><span class="row__eta"></span></button>`;
+    + `<span class="row__kind"><span lang="ja">${SIM.KINDS[c.kind].ja}</span> ${c.kind}</span><span class="row__out"></span><span class="row__eta"></span></button>`;
 
   const v = {
     c, trail, g, wideDot, li,
@@ -352,17 +371,17 @@ const els = {
   id: document.querySelector('#t-id'), kind: document.querySelector('#t-kind'),
   range: document.querySelector('#t-range'),
   eta: document.querySelector('#t-eta'), hull: document.querySelector('#t-hull'),
-  goal: document.querySelector('#t-goal'), state: document.querySelector('#t-state'),
+  goal: document.querySelector('#t-goal'), outlook: document.querySelector('#t-outlook'),
 };
 const bats = {};             // battery id -> { target, state } elements in the BATTERIES box
 for (const li of document.querySelectorAll('#bats li')) {
-  bats[li.dataset.battery] = { li, target: li.querySelector('.bat__target'), state: li.querySelector('.bat__state') };
+  bats[li.dataset.battery] = { li, target: li.querySelector('.bat__target'), state: li.querySelector('.bat__state'), auto: li.querySelector('.bat__auto') };
 }
 
 // What a battery's state reads as in the box, with its timer where it has one
 const BAT_WORDS = {
   silenced: b => `SILENCED ${Math.ceil(b.silenced)}S`,
-  hold:     () => 'HOLD',
+  hold:     b => b.auto ? 'WATCHING' : 'HOLD',
   retarget: b => `AIMING ${b.retarget.toFixed(1)}S`,
   range:    () => 'OUT OF RANGE',
   dry:      () => 'NO AMMO',
@@ -378,7 +397,9 @@ function refresh(force) {
   const cur = sim.contacts.find(c => c.id === selected);
   if (!cur || cur.state !== 'inbound') selected = inbound.length ? inbound[0].id : null;
 
+  const was = stage.dataset.state;
   stage.dataset.state = sim.breached ? 'breached' : !queue.length && !inbound.length ? 'held' : 'running';
+  if (stage.dataset.state !== was && stage.dataset.state !== 'running') renderAar();
   clockEl.textContent = mmss(sim.time);
   popEl.textContent = sim.population.toLocaleString('en-US');
   gfEl.textContent = `${Math.round(100 * sim.integrity / SIM.INTEGRITY)}%`;
@@ -400,7 +421,10 @@ function refresh(force) {
   if (force || want.some((li, i) => list.children[i] !== li) || list.children.length !== want.length) list.replaceChildren(...want);
   for (const v of order) {
     const c = v.c;
-    v.li.firstChild.querySelector('.row__eta').textContent = c.state === 'inbound' ? `${sim.eta(c).toFixed(1)}S` : STATE[c.state][1];
+    const row = v.li.firstChild, out = row.querySelector('.row__out'), fc = sim.forecast(c);
+    row.querySelector('.row__eta').textContent = c.state === 'inbound' ? `${sim.eta(c).toFixed(1)}S` : STATE[c.state][1];
+    out.dataset.outlook = fc ? fc.verdict : 'none';
+    out.textContent = fc ? OUTLOOK[fc.verdict][0] : '';
   }
   empty.hidden = order.length > 0;
 
@@ -423,15 +447,20 @@ function refresh(force) {
     els.eta.textContent = `${sim.eta(c).toFixed(1)} S`;
     els.hull.textContent = `${Math.round(100 * c.hp / c.maxHp)}%`;
     els.goal.textContent = goalOf(c);
-    els.state.textContent = STATE[c.state][1];
+    const fc = sim.forecast(c);
+    els.outlook.dataset.outlook = fc ? fc.verdict : 'none';
+    els.outlook.textContent = !fc ? STATE[c.state][1] : fc.verdict === 'open' ? 'NO SITE ON IT' : fc.verdict === 'holds' ? OUTLOOK.holds[1] : `${OUTLOOK[fc.verdict][1]} ${Math.round(100 * fc.ratio)}%`;
   } else {
-    for (const k of ['id', 'kind', 'range', 'eta', 'hull', 'goal', 'state']) els[k].textContent = '-';
+    delete els.outlook.dataset.outlook;
+    for (const k of ['id', 'kind', 'range', 'eta', 'hull', 'goal', 'outlook']) els[k].textContent = '-';
   }
 
   // The batteries: what each is on, and what it is doing
   for (const b of sim.batteries) {
     const el = bats[b.id], state = sim.stateOf(b);
     el.li.dataset.state = state;
+    el.li.dataset.auto = String(b.auto);
+    el.auto.setAttribute('aria-pressed', String(b.auto));
     el.target.textContent = b.target || '-';
     el.state.textContent = BAT_WORDS[state](b);
   }
@@ -510,6 +539,7 @@ const WORDS = {
   scope:     e => ['alert',  '防衛圏侵入',     `${e.id} ENTERS SCOPE`],
   assign:    e => ['info',   '交戦',           `${NAME[e.battery]} ON ${e.id}`],
   hold:      e => ['info',   '待機',           `${NAME[e.battery]} HOLDS FIRE`],
+  auto:      e => ['info',   e.on ? '自動' : '手動', `${NAME[e.battery]} STANDING ORDER ${e.on ? 'ON' : 'OFF'}`],
   released:  e => ['info',   '待機',           `${NAME[e.battery]} STANDS DOWN, ${e.id} DONE`],
   fire:      e => ['info',   '砲撃',           `${NAME[e.battery]} FIRES AT ${e.id}, ${Math.round(e.chance * 100)}%`],
   hit:       e => ['info',   '命中',           `${e.id} HIT, HULL ${Math.round(100 * e.hp / e.maxHp)}%`],
@@ -523,8 +553,47 @@ const WORDS = {
   refused:   e => ['alert',  ...REFUSED[e.reason].map((w, i) => i ? `${w}${e.battery ? ' ' + NAME[e.battery] : ''}` : w)],
 };
 
+function count(e) {
+  const type = TYPE[e.battery];
+  if (e.type === 'fire') { aar.fired[type]++; if (e.chance < 0.3) aar.longShots++; }
+  if (e.type === 'hit') aar.hit[type]++;
+  if (e.type === 'wasted') aar.wasted++;
+  if (e.type === 'destroyed') aar.kills++;
+  if (e.type === 'silenced') aar.silenced++;
+  if (e.type === 'impact') aar.impacts.push({ id: e.id, kind: sim.contacts.find(c => c.id === e.id).kind, damage: e.damage });
+}
+
+// A site that is on HOLD while a contact is inside its reach is idle
+function sampleIdle() {
+  const live = sim.inbound();
+  for (const b of sim.batteries) {
+    if (sim.stateOf(b) === 'hold' && live.some(c => sim.reach(b, c) <= SIM.WEAPONS[b.type].range)) aar.idle += SIM.STEP;
+  }
+}
+
+// S to D from what is left of the city; a breach is never better than D
+const GRADES = [[0.9, 'S'], [0.7, 'A'], [0.5, 'B'], [0.3, 'C'], [0, 'D']];
+const gradeOf = () => sim.breached ? 'D' : GRADES.find(([min]) => sim.population / SIM.START_POPULATION >= min)[1];
+
+function renderAar() {
+  const w = type => aar.fired[type] ? `${aar.fired[type]} FIRED ${Math.round(100 * aar.hit[type] / aar.fired[type])}% HIT` : 'NOT USED';
+  const worst = [...aar.impacts].sort((a, b) => b.damage - a.damage)[0];
+  const rows = [
+    ['GUNS', w('GUN')],
+    ['AA', w('AA')],
+    ['LONG SHOTS', `${aar.longShots} UNDER 30%`],
+    ['WASTED', `${aar.wasted} ON DEAD`],
+    ['IDLE SITES', `${Math.round(aar.idle)} SITE-S`],
+    ['SILENCED', `${aar.silenced} TIMES`],
+    ['HIT THE CITY', worst ? `${worst.id} ${worst.kind} -${worst.damage.toLocaleString('en-US')}` : 'NOTHING'],
+  ];
+  aarEl.innerHTML = `<p class="aar__head"><b class="aar__grade">${gradeOf()}</b><span><span lang="ja">戦闘報告</span> AFTER ACTION<br>${mmss(sim.time)} · ${sim.population.toLocaleString('en-US')} LEFT · GEOFRONT ${Math.round(100 * sim.integrity / SIM.INTEGRITY)}%</span></p>`
+    + `<dl class="aar__rows">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+}
+
 function report(events) {
   for (const e of events) {
+    count(e);
     // AA fires several rounds a second per site: show the tracers and small
     // bursts, but keep them out of the log and the ticker
     const aa = TYPE[e.battery] === 'AA' && ['fire', 'hit', 'miss', 'wasted'].includes(e.type);
@@ -554,11 +623,13 @@ function select(id) {
 /* ---------- THE LOOP ----------
    The sim runs in fixed steps of SIM.STEP whatever the frame rate, so a slow
    frame never changes what happens. A long pause (a hidden tab) is clipped,
-   rather than catching up in one go. While paused no time is owed at all. */
+   rather than catching up in one go. While paused no time is owed at all.
+   Speed x2 and x4 only owe more time per real second: the steps, and so every
+   result, are the same as at x1, and a frame never owes more than 1 s (30 steps). */
 let last = 0, owed = 0, hud = 0;
 
 function tick(now) {
-  if (last && !paused) owed += Math.min(0.25, (now - last) / 1000);
+  if (last && !paused) owed += Math.min(0.25, (now - last) / 1000) * rate;
   last = now;
   while (owed >= SIM.STEP) {
     // The run's contacts come in on the schedule, as they do in the arena
@@ -567,6 +638,7 @@ function tick(now) {
       sim.spawn(q.kind, q.bearing);
     }
     sim.step(SIM.STEP);
+    sampleIdle();
     owed -= SIM.STEP;
   }
   report(sim.takeEvents());
@@ -599,12 +671,24 @@ function toggle(batteryId) {
   if (b.target === c.id) sim.hold(b.id); else sim.assign(b.id, c.id);
   after();
 }
+// A standing order on one site, or on all of them: all go on unless all already are
+function toggleAuto(batteryId) {
+  const b = sim.batteries.find(x => x.id === batteryId);
+  sim.setAuto(b.id, !b.auto);
+  after();
+}
+function autoAll() {
+  const on = !sim.batteries.every(b => b.auto);
+  for (const b of sim.batteries) sim.setAuto(b.id, on);
+  after();
+}
 function holdAll() {
   for (const b of sim.batteries) sim.hold(b.id);
   after();
 }
 for (const btn of orderBtns) btn.addEventListener('click', () => toggle(btn.dataset.battery));
 document.querySelector('#hold-all').addEventListener('click', holdAll);
+for (const el of Object.values(bats)) el.auto.addEventListener('click', () => toggleAuto(el.li.dataset.battery));
 
 function setPaused(on) {
   paused = on;
@@ -613,6 +697,15 @@ function setPaused(on) {
   pauseBtn.textContent = on ? 'RESUME' : 'PAUSE';
 }
 pauseBtn.addEventListener('click', () => setPaused(!paused));
+
+function setRate(r) {
+  rate = r;
+  stage.dataset.rate = String(r);
+  speedBtn.dataset.rate = String(r);
+  speedBtn.textContent = `SPEED x${r}`;
+}
+const nextRate = () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]);
+speedBtn.addEventListener('click', nextRate);
 
 bar.addEventListener('submit', e => {
   e.preventDefault();
@@ -632,8 +725,9 @@ document.addEventListener('click', e => {
   if (hit) select(hit.dataset.id);
 });
 
-// 1 to 3 toggle a battery on the selected contact, H holds them all, Space
-// pauses, and the arrow keys step through the list, soonest first. None of it
+// 1 to 6 toggle a site on the selected contact, Shift+1 to 6 a site's standing
+// order (AUTO), A all of them, H holds them all (and ends every standing order),
+// T steps the game speed, Space pauses, and the arrow keys step through the list, soonest first. None of it
 // applies while a menu is open. Space is taken from buttons too (Enter still
 // presses them), so pausing never also presses whatever happens to have focus.
 const typing = e => e.target.closest?.('select, input, textarea');
@@ -642,6 +736,22 @@ document.addEventListener('keydown', e => {
   if (e.key === ' ') {
     e.preventDefault();
     if (!e.repeat) setPaused(!paused);
+    return;
+  }
+  const digit = /^Digit([1-6])$/.exec(e.code);
+  if (e.shiftKey && digit) {
+    e.preventDefault();
+    if (!e.repeat) toggleAuto(ORDER_KEYS[digit[1]]);
+    return;
+  }
+  if (e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    if (!e.repeat) autoAll();
+    return;
+  }
+  if (e.key.toLowerCase() === 't') {
+    e.preventDefault();
+    if (!e.repeat) nextRate();
     return;
   }
   if (ORDER_KEYS[e.key] || e.key.toLowerCase() === 'h') {

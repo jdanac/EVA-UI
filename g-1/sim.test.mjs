@@ -40,13 +40,13 @@ test('it flies a straight line at constant speed', () => {
   near(sim.dist(c), SPAWN_KM - KINDS.STANDARD.speed * 300 * STEP, 1e-6, 'distance after 10 s');
 });
 
-test('a standard contact crosses the whole path in 60 to 66 s', () => {
+test('a standard contact crosses the whole path in 36 to 40 s', () => {
   const sim = SIM.create();
   const c = sim.spawn('STANDARD', 180);
   runUntil(sim, () => c.state === 'impact');
   assert.equal(c.state, 'impact');
   near(sim.time, (SPAWN_KM - CITY_KM) / KINDS.STANDARD.speed, STEP * 2, 'time to impact');
-  assert.ok(sim.time >= 60 && sim.time <= 66, `took ${sim.time} s`);
+  assert.ok(sim.time >= 36 && sim.time <= 40, `took ${sim.time} s`);
 });
 
 test('it reaches the scope after about 26 s, which leaves 35 to 40 s on it', () => {
@@ -192,7 +192,7 @@ test('the same order again changes nothing; a new target costs the delay again',
 
 test('assigned out of range costs nothing and fires once the target comes in', () => {
   const sim = SIM.create(1);
-  const c = sim.spawn('STANDARD', 135);           // 40 km out
+  const c = sim.spawn('STANDARD', 135);           // at the scope edge, far outside gun range
   sim.assign('north', c.id);
   seconds(sim, RETARGET + 1);
   assert.equal(sim.stateOf(bat(sim, 'north')), 'range');
@@ -477,6 +477,108 @@ test('firing never changes where the next contact comes from', () => {
     return out;
   };
   assert.deepEqual(next(true), next(false));
+});
+
+test('forecast: a contact nobody is on is open, and one finished has none', () => {
+  const sim = SIM.create(1);
+  const c = sim.spawn('STANDARD', 135);
+  assert.equal(sim.forecast(c).verdict, 'open');
+  assert.equal(sim.forecast(c).expected, 0);
+  c.state = 'destroyed';
+  assert.equal(sim.forecast(c), null);
+});
+
+test('forecast: sites on a contact raise it, and the right ones hold a standard', () => {
+  const sim = SIM.create(1);
+  const c = sim.spawn('STANDARD', 150);
+  sim.assign('east', c.id);
+  const one = sim.forecast(c);
+  sim.assign('south', c.id); sim.assign('north', c.id);
+  const three = sim.forecast(c);
+  assert.ok(three.expected > one.expected, 'more sites, more expected damage');
+  assert.notEqual(three.verdict, 'open');
+  assert.ok(sim.forecast(c).ratio === three.ratio, 'asking twice changes nothing');
+});
+
+test('forecast: AA does next to nothing to a HEAVY, so a heavy covered only by AA leaks', () => {
+  const sim = SIM.create(1);
+  const c = sim.spawn('HEAVY', 150);
+  for (const id of ['aa1', 'aa2', 'aa3']) sim.assign(id, c.id);
+  assert.equal(sim.forecast(c).verdict, 'leaks');
+});
+
+test('forecast never reads whether a round in the air will hit', () => {
+  // Same run twice, with every round in the air forced to hit, then to miss:
+  // the forecast must come out the same
+  const run = hit => {
+    const sim = SIM.create(4);
+    const c = sim.spawn('STANDARD', 150);
+    sim.assign('east', c.id); sim.assign('south', c.id);
+    runUntil(sim, () => sim.shots.length >= 2);
+    for (const s of sim.shots) s.hit = hit;
+    return sim.forecast(c).expected;
+  };
+  assert.equal(run(true), run(false));
+});
+
+test('forecast: a round in the air counts by its chance, a silenced site not at all', () => {
+  const sim = SIM.create(1);
+  const c = sim.spawn('STANDARD', 150);
+  sim.assign('east', c.id);
+  runUntil(sim, () => sim.shots.length >= 1);
+  const s = sim.shots[0];
+  assert.ok(s.chance > 0 && s.chance <= 1, 'a shot carries its chance');
+  bat(sim, 'east').silenced = 10;
+  near(sim.forecast(c).expected, s.chance * s.damage, 1e-9, 'only the round in the air');
+});
+
+test('standing orders: off by default, so a site does nothing until it is ordered', () => {
+  const sim = SIM.create(1);
+  const c = sim.spawn('STANDARD', 150);
+  runUntil(sim, () => sim.reach(bat(sim, 'east'), c) <= 6);
+  assert.equal(bat(sim, 'east').target, null);
+  assert.equal(bat(sim, 'east').auto, false);
+});
+
+test('standing orders: a site on AUTO takes the soonest contact it would hit at 50% or better', () => {
+  const sim = SIM.create(1);
+  const far = sim.spawn('STANDARD', 150), near = sim.spawn('STANDARD', 150);
+  near.x *= 0.5; near.y *= 0.5;                    // closer, so sooner
+  sim.setAuto('east', true);
+  runUntil(sim, () => bat(sim, 'east').target);
+  assert.equal(bat(sim, 'east').target, near.id);
+  assert.ok(sim.chanceOf(bat(sim, 'east'), near) >= SIM.AUTO_MIN_CHANCE);
+  assert.notEqual(bat(sim, 'east').target, far.id);
+});
+
+test('standing orders: nothing below the chance is taken, and a finished target is replaced by itself', () => {
+  const sim = SIM.create(1);
+  const c = sim.spawn('STANDARD', 150);
+  sim.setAuto('east', true);
+  seconds(sim, 1);
+  assert.equal(bat(sim, 'east').target, null, 'out of range: nothing taken');
+  const d = sim.spawn('STANDARD', 150);
+  runUntil(sim, () => bat(sim, 'east').target === c.id);
+  c.state = 'destroyed';
+  seconds(sim, 1);
+  assert.equal(bat(sim, 'east').target, d.id, 'a new target without an order');
+  assert.equal(bat(sim, 'east').auto, true);
+});
+
+test('standing orders: HOLD ends them, and a silenced site does not pick', () => {
+  const sim = SIM.create(1);
+  const c = sim.spawn('STANDARD', 150);
+  sim.setAuto('east', true); sim.setAuto('south', true);
+  runUntil(sim, () => bat(sim, 'east').target && bat(sim, 'south').target);
+  sim.hold('east');
+  assert.equal(bat(sim, 'east').auto, false);
+  assert.equal(bat(sim, 'east').target, null);
+  seconds(sim, 1);
+  assert.equal(bat(sim, 'east').target, null, 'held for good');
+  bat(sim, 'south').target = null; bat(sim, 'south').silenced = 5;
+  seconds(sim, 1);
+  assert.equal(bat(sim, 'south').target, null, 'silenced: no pick');
+  assert.ok(sim.takeEvents().some(e => e.type === 'auto' && e.on === false));
 });
 
 console.log(failed ? `\n${failed} failed` : '\nall passed');

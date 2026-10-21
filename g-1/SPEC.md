@@ -94,7 +94,7 @@ All of this stays; most of it is the stage the commands will play on.
   knows nothing about longitude, latitude or pixels.
 - `sim.js`: the rules with no DOM, fixed step, and a seeded random generator in
   two separate streams (spawns and hit rolls, so firing never changes where the
-  next contact comes from, and `?seed=N` replays comparably). 33 checks in
+  next contact comes from, and `?seed=N` replays comparably). 42 checks in
   `sim.test.mjs` (`node g-1/sim.test.mjs`).
 - The run: a scripted, escalating schedule of 23 contacts (`SIM.schedule(seed)`,
   bearings from the seed). The page plays it from the start, and the arena
@@ -107,8 +107,10 @@ All of this stays; most of it is the stage the commands will play on.
   and a ticker. Tokyo-3 with its Geofront is drawn at the center.
 - Contacts: STANDARD and HEAVY flying a straight line at the city, and RAIDER
   flying at a site, from a bearing in the sea sector (100 to 230 degrees),
-  spawning 40 km out and reaching the scope at 24.5 km. All 25% slower than the
-  first build (STANDARD 0.6, HEAVY 0.375, RAIDER 1.05 km/s), after the first
+  spawning 25 km out, just outside the scope (24.5 km), so each one crosses
+  onto the scope within a second of appearing: no dead time before it can be
+  seen (it was 40 km, and 26 s of an empty screen before the first contact).
+  All 25% slower than the first build (STANDARD 0.6, HEAVY 0.375, RAIDER 1.05 km/s), after the first
   playtest found them too quick. (SCOUT is still in the sim's table but not in
   the run.)
 - Six sites under fire orders: three GUNs and three AA (see "Weapons"), each
@@ -116,6 +118,10 @@ All of this stays; most of it is the stage the commands will play on.
   will be and fly a straight line there; they have a flight time and a hit
   chance that falls with distance. Hull damage (less the contact's armor),
   destroyed and impact states, population loss and Geofront integrity.
+- **Round two, built 2026-10-15** (see "Round two: pacing, forecast, standing
+  orders"): spawn at the scope edge, game speed x1/x2/x4 (key T), a forecast per
+  contact (OUTLOOK), an after-action report with a grade, and standing orders
+  per site (AUTO, Shift+1 to 6 and A).
 - **Milestone A is built** (2026-10-14): the rules in "Milestone A in detail",
   with the screen for them (order buttons and keys 1 to 6, H, Space to pause,
   two ammo readouts and the Geofront, order lines on the scope, the end
@@ -369,6 +375,62 @@ was too easy: PATIENT reached 68% beside PRIORITY's 77%).
 
 The human test (five runs, four questions) is the next check, before C4.
 
+### Round two: pacing, forecast, standing orders (2026-10-15)
+
+Prompted by the second playtest: speed was right now, but contacts took too long
+to come into range and the run was too long. Built in this order, each checked
+with `node g-1/sim.test.mjs` and the arena (300 seeds):
+
+1. **Spawn at the scope edge** (`SPAWN_KM` 40 to 25). The prediction that it
+   would barely move the arena held: the fight inside weapon range is set by
+   range and speed, not by where the contact starts. PRIORITY 53.5% to 51.8%,
+   PATIENT 39.6% to 32.8%, FLAT 60.5% to 64.6% (the schedule times are the
+   same, so contacts now arrive earlier and overlap a little differently).
+   The heavy hull and the schedule were not touched. Flight time: STANDARD 38 s
+   to the city (was 63) and 22 s to gun range (was 47), HEAVY 61 s (was 101),
+   RAIDER 22 s (was 36). The last contact arrives at about 213 s, so a whole run
+   is about 3.5 minutes (it was about 4 minutes 15 seconds).
+2. **Game speed x1, x2, x4** (SPEED button, key T). Only the page owes the sim
+   more time per frame; the fixed step and the seeds are untouched, so the arena
+   cannot change and a replayed seed is the same at any speed. A frame never
+   owes more than one second (30 steps).
+3. **Forecast** (`sim.forecast(contact)`, drawn as a tag on each contact row and
+   an OUTLOOK line in SELECTED). It sums the expected damage from rounds in the
+   air (by their hit chance, never by whether they will hit: that is rolled but
+   not shown, and a test checks it) and from each site on the contact (its
+   chance at each point of the contact's course, its cooldown, its aiming
+   delay), against the hull. NONE: no site on it. LEAK: under 60% of the hull.
+   CLOSE: 60 to 100%. STOP: the fire should stop it. It ignores ammunition and
+   any later order, so it is an expectation, not a promise.
+4. **After-action report** on the CITY HELD and BREACHED banners: a grade (S 90%
+   of the city or more, A 70, B 50, C 30, otherwise D; a breach is D), rounds
+   fired and hit per weapon, long shots (under 30%), rounds wasted on dead
+   contacts, idle site-seconds (a site on HOLD with a contact in its reach),
+   how often a site was silenced, and the worst impact. Built in `script.js`
+   from events the sim already sends: no sim change.
+5. **Standing orders** (`sim.setAuto`). A site on AUTO takes, when it has no
+   target, the soonest contact it would hit at 50% or better, and keeps it
+   until it is finished. It is not weapon-aware, never swaps and never saves
+   ammunition, on purpose. Off by default, so everything before is unchanged;
+   HOLD (also H) ends it. Keys: Shift+1 to 6 for one site, A for all, or the AUTO
+   button on the row.
+
+**The gate for standing orders.** The risk was automating the winning habit.
+The arena bot AUTO-ALL puts every site on AUTO at the start and never gives an
+order:
+
+| bot | population left | breached |
+|---|---|---|
+| PRIORITY | 51.8% | 10.7% |
+| FLAT | 64.6% | 5.7% |
+| PATIENT (best single habit) | 32.8% | 22.3% |
+| AUTO-ALL (standing orders only) | 31.1% | 26.3% |
+
+AUTO-ALL lands where one habit does (5% under PATIENT, 40% under PRIORITY), so
+standing orders do not replace the decisions. What is untested is the thing they
+are for: whether a person on AUTO who steps in only for the hard cases gives
+fewer orders a minute without losing. That needs a human test, or a hybrid bot.
+
 ### C4. Waves, win and lose
 
 Eight to ten escalating contact groups in the game itself (turning the arena's
@@ -459,6 +521,62 @@ the log and the styling already built stay.
 
 Command words for the kanji labels: 交戦 ENGAGE, 待機 HOLD, 出撃 SORTIE, 承認
 AUTHORIZED, 否定 DENIED, 隔壁閉鎖 BULKHEAD SEAL, 識別 IDENTIFY.
+
+## Design principles to consider (added 2026-10-15)
+
+Not rules yet: ideas to weigh against playtests. The owner picks which become
+backlog entries (C12 onward).
+
+1. **Input vs output randomness.** Randomness before a decision (what spawns,
+   from where) makes you plan; randomness after it (did the shell hit) feels
+   unfair when one roll decides a lot. Gun hits at 20 to 85% are big output
+   rolls, AA's many small rolls feel fairer. Show the odds, or make big shots
+   rarer and more reliable.
+2. **Forecast the outcome.** Show what happens if nothing changes: projected
+   impact time per contact, whether current fire holds it, when ammo runs out.
+   A loss then reads as the player's own (human-test question 2).
+3. **Tension and release.** A build-up, a short peak, a breather. The schedule
+   today rises roughly linearly; C4 waves should carry deliberate lulls.
+4. **Dead time is a pacing bug, not a difficulty knob.** Time compression
+   (1x/2x/4x) removes waiting without rebalancing. Pairs with spawning at the
+   scope edge.
+5. **Attention is the real resource.** Six sites cost clicks, against design
+   rule 1. A commander sets doctrine: standing orders per site (WEAPONS FREE,
+   TIGHT, HOLD, or fire above a chance), and overrides only the hard cases.
+6. **Break a dominant habit with consequences, not numbers.** FLAT beating
+   PRIORITY says "which contact first" is not yet a choice. Kinds should do
+   things that compound (a lost site costs firepower for the rest of the run),
+   not just carry different values.
+7. **Readable loss.** An after-action report (what got through, shells wasted on
+   long shots, idle site-seconds, the contact that broke you) teaches faster
+   than a tutorial.
+8. **Short loop, instant retry.** Two to three minute runs, one key to replay
+   the same seed, a letter grade from population and integrity.
+9. **Teach through the level.** The first wave uses one kind and one weapon;
+   each later wave adds one new thing.
+10. **Audio carries attention.** Distinct cues for in range, site silenced and
+    low ammo let the eyes stay on the map. C-1 and W-1 sounds can be borrowed.
+
+Built from this list on 2026-10-15: principle 2 (the forecast), 4 (time
+compression and the scope-edge spawn), 5 (standing orders, as one AUTO setting,
+not the several doctrines sketched) and 7 (the after-action report, with the
+grade from 8). Not built: 1, 3, 6, 8's instant retry, 9 and 10.
+
+### Candidate ideas (not picked)
+
+- **Angel archetypes**, each punishing a habit: one that fires back at sites
+  shooting at it (Ramiel), one that splits when damaged (Israfel), one that
+  falls from orbit onto a marked point and must be met early (Sahaquiel).
+- **Operation Yashima**: one positron shot per run with a long charge, the other
+  sites quiet while it charges.
+- **Evacuation**: spend time to move people out of a sector, fewer exposed
+  there, at the cost of a site's readiness.
+- **Daily seed**: everyone plays the same run (local scores only).
+- **Dev overlay**: orders per minute, idle time, time from first sight to first
+  order, so "felt slow" becomes a number across builds.
+
+Next: the human test again with the new controls. Also: watch someone else play
+without explaining anything.
 
 ## How to tell a mechanic is working
 

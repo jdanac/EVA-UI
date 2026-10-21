@@ -39,12 +39,13 @@ function view(sim) {
       chance: Object.fromEntries(sim.batteries.map(b => [b.id, sim.chanceOf(b, c)])),
       inFlight: sim.shots.filter(s => s.target === c.id).length,
     })),
-    batteries: sim.batteries.map(b => ({ id: b.id, type: b.type, target: b.target, state: sim.stateOf(b) })),
+    batteries: sim.batteries.map(b => ({ id: b.id, type: b.type, target: b.target, state: sim.stateOf(b), auto: b.auto })),
   };
 }
 
 // A bot looks at the view and returns orders: { battery: contact id } to
-// assign, { battery: null } to hold, and a battery left out keeps its order.
+// assign, { battery: null } to hold, { battery: 'auto' } for a standing order,
+// and a battery left out keeps its order.
 const BOTS = {
   // Every battery on the soonest contact, always
   SPAM: v => {
@@ -72,6 +73,11 @@ const BOTS = {
     }
     return out;
   },
+
+  // Standing orders only: every site on AUTO from the start, no order ever
+  // given. If this gets close to PRIORITY, the standing order has automated the
+  // game's decisions; it should land about where one habit (PATIENT) does.
+  'AUTO-ALL': v => Object.fromEntries(v.batteries.map(b => [b.id, 'auto'])),
 
   // A battery with nothing to do takes any contact at random and keeps it
   RANDOM: (v, random) => {
@@ -143,7 +149,7 @@ function play(bot, seed) {
     if (sim.time >= nextDecision) {
       nextDecision += DECIDE;
       for (const [b, id] of Object.entries(bot(view(sim), botRandom))) {
-        if (id) sim.assign(b, id); else sim.hold(b);
+        if (id === 'auto') sim.setAuto(b, true); else if (id) sim.assign(b, id); else sim.hold(b);
       }
     }
     sim.step(SIM.STEP);
@@ -173,6 +179,8 @@ const gap = results.PRIORITY.population / results.SPAM.population - 1;
 console.log(`\nPRIORITY vs SPAM: ${gap >= 0 ? '+' : ''}${(100 * gap).toFixed(1)}% population (target: +30% or more)`);
 // The harder check: against the best single habit, not the worst
 const habit = results.PRIORITY.population / results.PATIENT.population - 1;
+console.log(`AUTO-ALL vs PRIORITY: ${(100 * (results['AUTO-ALL'].population / results.PRIORITY.population - 1)).toFixed(1)}% population (standing orders alone, no orders given)`);
+console.log(`AUTO-ALL vs PATIENT: ${(100 * (results['AUTO-ALL'].population / results.PATIENT.population - 1)).toFixed(1)}% population`);
 console.log(`PRIORITY vs PATIENT: ${habit >= 0 ? '+' : ''}${(100 * habit).toFixed(1)}% population`);
 // Each of these should be clearly worse than PRIORITY, or the thing it takes away does not matter
 for (const [name, what] of [['GUNS-ONLY', 'without the AA'], ['AA-ONLY', 'without the guns'], ['FLAT', 'without ranking threats']]) {

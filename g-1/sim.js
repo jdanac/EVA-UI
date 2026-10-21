@@ -20,7 +20,7 @@
 
 const SIM = (() => {
   const STEP = 1 / 30;        // seconds per sim step; script.js runs the sim in whole steps of this
-  const SPAWN_KM = 40;        // contacts appear this far from the city
+  const SPAWN_KM = 25;        // contacts appear this far from the city, just outside the scope
   const SCOPE_KM = 24.5;      // radius of the main radar scope
   const CITY_KM = 2;          // a contact this close to the city has hit it
   const RAID_KM = 0.5;        // a raider this close to its battery has hit it
@@ -63,6 +63,7 @@ const SIM = (() => {
     { id: 'aa3', type: 'AA', name: 'AA-3', ja: '第三対空', x: -5.4, y: -7.0 },
   ];
   const RETARGET = 2.5;       // seconds from a new assignment to the first shot
+  const AUTO_MIN_CHANCE = 0.5; // a site on standing orders only takes a contact it would hit at least this often
   const SILENCED = 20;        // seconds a battery is out after a raider reaches it
 
   // Chance a round hits, from the distance to the contact when it is fired and
@@ -123,7 +124,7 @@ const SIM = (() => {
     const hitRandom = seeded(seed ^ 0x9E3779B9);
     const contacts = [];      // every contact so far, including finished ones
     const shots = [];         // rounds in the air
-    const batteries = BATTERIES.map(b => ({ ...b, target: null, retarget: 0, cooldown: 0, silenced: 0 }));
+    const batteries = BATTERIES.map(b => ({ ...b, target: null, retarget: 0, cooldown: 0, silenced: 0, auto: false }));
     let events = [];          // what happened since the UI last asked
     let time = 0;
     let serial = 0;
@@ -227,12 +228,71 @@ const SIM = (() => {
     }
 
     // The other order: stop. Holding a battery that is already holding does nothing.
+    // It also ends a standing order: HOLD means hold.
     function hold(batteryId) {
       const b = battery(batteryId);
-      if (!b || !b.target) return;
+      if (!b) return;
+      if (b.auto) {
+        b.auto = false;
+        events.push({ type: 'auto', battery: b.id, on: false, t: time });
+      }
+      if (!b.target) return;
       events.push({ type: 'hold', battery: b.id, id: b.target, t: time });
       b.target = null;
       b.retarget = 0;
+    }
+
+    // A standing order: a site that is on AUTO takes a target for itself when it
+    // has none. The rule is deliberately plain: the soonest contact it would
+    // hit at AUTO_MIN_CHANCE or better, kept until that contact is finished.
+    // It does not know which weapon suits which contact, never swaps targets
+    // and never saves ammunition: the player still decides all of that.
+    function setAuto(batteryId, on) {
+      const b = battery(batteryId);
+      if (!b || b.auto === !!on) return;
+      b.auto = !!on;
+      events.push({ type: 'auto', battery: b.id, on: !!on, t: time });
+    }
+    function autoPick(b) {
+      let best = null;
+      for (const c of contacts) {
+        if (c.state !== 'inbound') continue;
+        const chance = chanceOf(b, c);
+        if (chance === null || chance < AUTO_MIN_CHANCE) continue;
+        if (!best || eta(c) < eta(best)) best = c;
+      }
+      if (best) assign(b.id, best.id);
+    }
+
+    // What the screen can tell you about a contact's chances: the damage it can
+    // be expected to take before it arrives, set against its hull, if nothing
+    // changes. It counts rounds already in the air by their hit chance (never
+    // by whether they will hit: that is rolled but not shown), and each site
+    // on it from the moment it has swung onto it, at the chance it would have
+    // as the contact keeps its course. It ignores the pool running out and any
+    // new order. verdict: 'open' (no site on it), 'leaks' (under 60% of its
+    // hull), 'close' (60% to 100%) or 'holds'. A raider counts the same way.
+    const FORECAST_STEP = 0.5;
+    function forecast(c) {
+      if (c.state !== 'inbound') return null;
+      const armor = KINDS[c.kind].armor, window = eta(c);
+      let expected = 0, covered = false;
+      for (const s of shots) if (s.target === c.id) { expected += s.chance * Math.max(1, s.damage - armor); covered = true; }
+      for (const b of batteries) {
+        if (b.target !== c.id || b.silenced > 0) continue;
+        covered = true;
+        const w = WEAPONS[b.type], dmg = Math.max(1, w.damage - armor);
+        let next = Math.max(b.retarget, b.cooldown);    // when this site fires next
+        for (let t = 0; t <= window; t += FORECAST_STEP) {
+          const px = c.x + c.vx * t, py = c.y + c.vy * t;
+          const chance = hitChance(b.type, Math.hypot(px - b.x, py - b.y), c.speed);
+          if (chance === null || t < next) continue;
+          // Fires every cooldown while it can: that is FORECAST_STEP / cooldown rounds per step
+          expected += chance * dmg * FORECAST_STEP / w.cooldown;
+        }
+      }
+      const ratio = expected / c.hp;
+      return { expected, ratio, verdict: !covered ? 'open' : ratio >= 1 ? 'holds' : ratio >= 0.6 ? 'close' : 'leaks' };
     }
 
     // A round flies a straight line from the battery to where the contact will
@@ -247,7 +307,7 @@ const SIM = (() => {
         id: ++shotSerial, battery: b.id, weapon: b.type, target: c.id,
         t0: time, t1: time + aim.t,
         from: { x: b.x, y: b.y }, to: { x: aim.x, y: aim.y },
-        damage: w.damage,
+        damage: w.damage, chance,
         hit: hitRandom() < chance,
       });
       events.push({ type: 'fire', id: c.id, battery: b.id, weapon: b.type, chance, ammo: ammo[b.type], t: time });
@@ -349,6 +409,7 @@ const SIM = (() => {
       // themselves (never to a new target: that is the player's call), and the
       // rest fire when they can, in a fixed order so a seed repeats
       for (const b of batteries) {
+        if (b.auto && !b.target && b.silenced === 0) autoPick(b);
         if (!b.target) continue;
         const c = find(b.target);
         if (c.state !== 'inbound') {
@@ -369,7 +430,7 @@ const SIM = (() => {
     }
 
     return {
-      spawn, spawnRandom, step, takeEvents, assign, hold, dist, eta, chanceOf,
+      spawn, spawnRandom, step, takeEvents, assign, hold, setAuto, dist, eta, chanceOf, forecast,
       contacts, shots, batteries,
       stateOf, reach,
       get time() { return time; },
@@ -383,7 +444,7 @@ const SIM = (() => {
 
   return {
     create, schedule, hitChance, KINDS, WEAPONS, BATTERIES, STEP, SPAWN_KM, SCOPE_KM, CITY_KM, RAID_KM, SECTOR,
-    RETARGET, SILENCED,
+    RETARGET, SILENCED, AUTO_MIN_CHANCE,
     START_POPULATION, INTEGRITY,
   };
 })();
